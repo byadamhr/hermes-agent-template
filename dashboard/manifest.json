@@ -1,0 +1,15 @@
+{
+  "name": "media",
+  "label": "Media",
+  "description": "Browse, preview, and manage media files",
+  "icon": "Image",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/media",
+    "position": "after:skills"
+  },
+  "slots": [],
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}
