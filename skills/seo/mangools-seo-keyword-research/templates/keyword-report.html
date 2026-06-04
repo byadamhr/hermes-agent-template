@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Keyword Research Report</title>
+<style>
+:root {
+    --color-primary: #FE4C1C;
+    --color-primary-hover: #1A7A8A;
+    --color-success: #22C55E;
+    --color-warning: #F59E0B;
+    --color-danger: #EF4444;
+    --color-intent-c: #FF6B9D;
+    --color-intent-t: #FFB700;
+    --color-intent-n: #50A5FF;
+    --color-intent-i: #9D4EDD;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1e293b; line-height: 1.5; }
+.header { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); color: white; padding: 2rem; }
+.header h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+.header .subtitle { opacity: 0.8; font-size: 0.9rem; }
+.stats { display: flex; gap: 1rem; margin-top: 1rem; flex-wrap: wrap; }
+.stat-box { background: rgba(255,255,255,0.1); border-radius: 8px; padding: 1rem; min-width: 120px; }
+.stat-box .label { font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; }
+.stat-box .value { font-size: 1.25rem; font-weight: 700; }
+.controls { padding: 1rem 2rem; background: white; border-bottom: 1px solid #e2e8f0; display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+.controls select, .controls input { padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.875rem; }
+.controls input { flex: 1; min-width: 200px; }
+.controls button { padding: 0.5rem 1rem; background: var(--color-primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.875rem; }
+.controls button:hover { background: var(--color-primary-hover); }
+.controls button.secondary { background: #64748b; }
+.controls button.secondary:hover { background: #475569; }
+.legend { padding: 0.75rem 2rem; background: #f1f5f9; font-size: 0.8rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 0.25rem; }
+.badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: 600; color: white; }
+.badge-c { background: var(--color-intent-c); }
+.badge-t { background: var(--color-intent-t); color: #1e293b; }
+.badge-n { background: var(--color-intent-n); }
+.badge-i { background: var(--color-intent-i); }
+.kd-easy { color: var(--color-success); font-weight: 600; }
+.kd-medium { color: var(--color-warning); font-weight: 600; }
+.kd-hard { color: var(--color-danger); font-weight: 600; }
+.trend-pos { color: var(--color-success); }
+.trend-neg { color: var(--color-danger); }
+.trend-na { color: #94a3b8; }
+table { width: 100%; border-collapse: collapse; background: white; }
+th { background: #f8fafc; padding: 0.75rem 1rem; text-align: left; font-size: 0.75rem; text-transform: uppercase; color: #64748b; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; }
+td { padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; font-size: 0.875rem; }
+tr:hover { background: #f8fafc; }
+tr.selected { background: #f0fdf4; }
+.cluster-tag { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.7rem; background: #e2e8f0; color: #475569; margin-right: 0.25rem; }
+.btn-detail { padding: 0.3rem 0.75rem; background: var(--color-primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+.btn-detail:hover { background: var(--color-primary-hover); }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: white; border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; padding: 1.5rem; }
+.modal h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--color-primary); }
+.modal .field { margin-bottom: 0.75rem; }
+.modal .field .label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; }
+.modal .field .value { font-size: 1rem; font-weight: 500; }
+.modal .close { float: right; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #64748b; }
+.roadmap { margin-top: 1rem; }
+.roadmap h3 { font-size: 0.9rem; margin-bottom: 0.5rem; }
+.roadmap ul { padding-left: 1.25rem; font-size: 0.85rem; }
+.roadmap li { margin-bottom: 0.25rem; }
+.no-results { padding: 2rem; text-align: center; color: #64748b; }
+
+/* Selection summary */
+.selection-bar { padding: 0.75rem 2rem; background: #eff6ff; border-bottom: 1px solid #bfdbfe; display: flex; gap: 1.5rem; align-items: center; font-size: 0.875rem; flex-wrap: wrap; }
+.selection-bar .sel-stat { font-weight: 600; }
+.selection-bar .sel-label { color: #64748b; }
+.selection-bar.hidden { display: none; }
+
+/* Checkbox styling */
+input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--color-primary); }
+
+/* Print styles */
+@media print {
+    .controls, .selection-bar, .btn-detail, th:first-child, td:first-child { display: none !important; }
+    .header { background: #1e293b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    tr.selected { background: #f0fdf4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body { font-size: 10pt; }
+}
+</style>
+</head>
+<body>
+<div class="header">
+    <h1 id="reportTitle">Keyword Research Report</h1>
+    <div class="subtitle" id="reportSubtitle">Generated with Mangools API</div>
+    <div class="stats">
+        <div class="stat-box"><div class="label">Total Hours</div><div class="value" id="totalHours">0h</div></div>
+        <div class="stat-box"><div class="label">Base Estimate</div><div class="value" id="baseHours">0h</div></div>
+        <div class="stat-box"><div class="label">Keywords</div><div class="value" id="kwCount">0</div></div>
+        <div class="stat-box"><div class="label">Avg/Keyword</div><div class="value" id="avgHours">0h</div></div>
+    </div>
+</div>
+<div class="controls">
+    <select id="clusterFilter"><option value="">All Clusters</option></select>
+    <select id="kdFilter"><option value="">All KD</option><option value="Easy">Easy (≤10)</option><option value="Medium">Medium (11-15)</option><option value="Hard">Hard (16+)</option><option value="Unknown">Unknown</option></select>
+    <input type="text" id="searchFilter" placeholder="Search keywords...">
+    <button onclick="resetFilters()">Reset</button>
+    <button class="secondary" onclick="selectAll()">Select All</button>
+    <button class="secondary" onclick="selectNone()">None</button>
+    <button class="secondary" onclick="sortBySelected()">Sort by Selected</button>
+    <button onclick="printSelected()">🖨️ Print Selected</button>
+</div>
+<div class="selection-bar hidden" id="selectionBar">
+    <span><span class="sel-label">Selected:</span> <span class="sel-stat" id="selCount">0</span></span>
+    <span><span class="sel-label">Volume:</span> <span class="sel-stat" id="selVolume">0</span></span>
+    <span><span class="sel-label">Est. Time:</span> <span class="sel-stat" id="selTime">0h</span></span>
+    <span><span class="sel-label">Clusters:</span> <span class="sel-stat" id="selClusters">0</span></span>
+</div>
+<div class="legend">
+    <span><span class="badge badge-c">C</span> Commercial</span>
+    <span><span class="badge badge-t">T</span> Transactional</span>
+    <span><span class="badge badge-n">N</span> Navigational</span>
+    <span><span class="badge badge-i">I</span> Informational</span>
+    <span>📰 Media/Blogs</span>
+    <span>🛍️ Product Pages</span>
+</div>
+<div style="overflow-x: auto; padding: 0 2rem 2rem;">
+    <table>
+        <thead><tr>
+            <th><input type="checkbox" id="selectAllCb" onchange="toggleAll(this)"></th>
+            <th>Keyword</th><th>Volume</th><th>CPC</th><th>Intent</th><th>KD</th><th>Content</th><th>Trend</th><th>Time</th><th></th>
+        </tr></thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+    <div class="no-results" id="noResults" style="display:none;">No keywords match filters</div>
+</div>
+<div class="modal-overlay" id="modal"><div class="modal"><button class="close" onclick="closeModal()">&times;</button><div id="modalContent"></div></div></div>
+
+<script>
+const clusterData = {
+    'Cluster Name': [
+        {
+            name: 'keyword',
+            search: 17800,
+            cpc: 0.80,
+            intent: ['C', 'T'],
+            kd: 11,
+            content: ['MB'],
+            time: 3.5,
+            trend: '+7%'
+        }
+    ]
+};
+
+// Selection state
+const selected = new Set();
+
+function getAllKeywords() {
+    const all = [];
+    for (const [cluster, items] of Object.entries(clusterData)) {
+        items.forEach(k => all.push({...k, cluster}));
+    }
+    return all.sort((a,b) => b.search - a.search);
+}
+
+function renderTable(keywords) {
+    const tbody = document.getElementById('tableBody');
+    const noResults = document.getElementById('noResults');
+    if (!keywords.length) { tbody.innerHTML = ''; noResults.style.display = 'block'; return; }
+    noResults.style.display = 'none';
+    tbody.innerHTML = keywords.map(k => {
+        const intentBadges = k.intent.map(i => `<span class="badge badge-${i.toLowerCase()}">${i}</span>`).join(' ');
+        const kdClass = k.kd === null ? '' : k.kd <= 10 ? 'kd-easy' : k.kd <= 15 ? 'kd-medium' : 'kd-hard';
+        const kdLabel = k.kd === null ? 'N/A' : k.kd;
+        const trendClass = k.trend.startsWith('+') ? 'trend-pos' : k.trend.startsWith('-') ? 'trend-neg' : 'trend-na';
+        const contentIcons = k.content.map(c => c === 'MB' ? '📰' : c === 'PSP' ? '🛍️' : c === '?' ? '❓' : '🏠').join(' ');
+        const checked = selected.has(k.name) ? 'checked' : '';
+        const rowClass = selected.has(k.name) ? 'class="selected"' : '';
+        return `<tr ${rowClass}>
+            <td><input type="checkbox" ${checked} onchange="toggleSelect('${k.name.replace(/'/g,"\\'")}', this.checked)"></td>
+            <td><span class="cluster-tag">${k.cluster}</span>${k.name}</td>
+            <td>${k.search.toLocaleString()}</td>
+            <td>$${k.cpc.toFixed(2)}</td>
+            <td>${intentBadges}</td>
+            <td class="${kdClass}">${kdLabel}</td>
+            <td>${contentIcons}</td>
+            <td class="${trendClass}">${k.trend}</td>
+            <td>${k.time}h</td>
+            <td><button class="btn-detail" onclick='showModal(${JSON.stringify(k).replace(/'/g,"\\'")})'>Details</button></td>
+        </tr>`;
+    }).join('');
+    updateSelectAllCb();
+}
+
+function toggleSelect(name, checked) {
+    if (checked) selected.add(name); else selected.delete(name);
+    updateSelectionBar();
+    // Update row highlight
+    document.querySelectorAll('#tableBody tr').forEach(tr => {
+        const cb = tr.querySelector('input[type="checkbox"]');
+        if (cb) {
+            const n = tr.children[1]?.textContent?.trim();
+            // Find the name from the cluster-tag + text
+        }
+    });
+}
+
+function toggleAll(cb) {
+    const all = getAllKeywords().filter(k => isFiltered(k));
+    if (cb.checked) { all.forEach(k => selected.add(k.name)); }
+    else { all.forEach(k => selected.delete(k.name)); }
+    renderTable(getAllKeywords().filter(k => isFiltered(k)));
+    updateSelectionBar();
+}
+
+function selectAll() {
+    getAllKeywords().filter(k => isFiltered(k)).forEach(k => selected.add(k.name));
+    renderTable(getAllKeywords().filter(k => isFiltered(k)));
+    updateSelectionBar();
+}
+
+function selectNone() {
+    selected.clear();
+    renderTable(getAllKeywords().filter(k => isFiltered(k)));
+    updateSelectionBar();
+}
+
+function sortBySelected() {
+    const all = getAllKeywords().filter(k => isFiltered(k));
+    all.sort((a,b) => {
+        const sa = selected.has(a.name) ? 0 : 1;
+        const sb = selected.has(b.name) ? 0 : 1;
+        if (sa !== sb) return sa - sb;
+        return b.search - a.search;
+    });
+    renderTable(all);
+}
+
+function updateSelectionBar() {
+    const bar = document.getElementById('selectionBar');
+    if (selected.size === 0) { bar.classList.add('hidden'); return; }
+    bar.classList.remove('hidden');
+    const all = getAllKeywords();
+    const sel = all.filter(k => selected.has(k.name));
+    const totalVol = sel.reduce((s,k) => s + k.search, 0);
+    const totalTime = sel.reduce((s,k) => s + k.time, 0);
+    const clusters = new Set(sel.map(k => k.cluster));
+    document.getElementById('selCount').textContent = sel.length;
+    document.getElementById('selVolume').textContent = totalVol.toLocaleString();
+    document.getElementById('selTime').textContent = totalTime.toFixed(1) + 'h';
+    document.getElementById('selClusters').textContent = clusters.size;
+}
+
+function updateSelectAllCb() {
+    const all = getAllKeywords().filter(k => isFiltered(k));
+    const cb = document.getElementById('selectAllCb');
+    cb.checked = all.length > 0 && all.every(k => selected.has(k.name));
+    cb.indeterminate = !cb.checked && all.some(k => selected.has(k.name));
+}
+
+function isFiltered(k) {
+    const cluster = document.getElementById('clusterFilter').value;
+    const kd = document.getElementById('kdFilter').value;
+    const search = document.getElementById('searchFilter').value.toLowerCase();
+    if (cluster && k.cluster !== cluster) return false;
+    if (kd) {
+        if (kd === 'Unknown' && k.kd !== null) return false;
+        if (kd === 'Easy' && (k.kd === null || k.kd > 10)) return false;
+        if (kd === 'Medium' && (k.kd === null || k.kd <= 10 || k.kd > 15)) return false;
+        if (kd === 'Hard' && (k.kd === null || k.kd <= 15)) return false;
+    }
+    if (search && !k.name.toLowerCase().includes(search)) return false;
+    return true;
+}
+
+function showModal(k) {
+    const content = document.getElementById('modalContent');
+    content.innerHTML = `
+        <h2>${k.name}</h2>
+        <div class="field"><div class="label">Cluster</div><div class="value">${k.cluster}</div></div>
+        <div class="field"><div class="label">Search Volume</div><div class="value">${k.search.toLocaleString()}/month</div></div>
+        <div class="field"><div class="label">CPC</div><div class="value">$${k.cpc.toFixed(2)}</div></div>
+        <div class="field"><div class="label">Keyword Difficulty</div><div class="value">${k.kd === null ? 'N/A' : k.kd + ' / 100'}</div></div>
+        <div class="field"><div class="label">Trend</div><div class="value">${k.trend}</div></div>
+        <div class="field"><div class="label">Intent</div><div class="value">${k.intent.join(', ')}</div></div>
+        <div class="field"><div class="label">Est. Optimization Time</div><div class="value">${k.time} hours</div></div>
+        <div class="roadmap"><h3>Optimization Roadmap</h3><ul>
+            <li><b>Content & Copy:</b> Create/update product comparison and review content</li>
+            <li><b>Schema & Semantics:</b> Product schema, FAQ schema for common questions</li>
+            <li><b>Technical:</b> Optimize page speed, mobile experience</li>
+            <li><b>Q&A & Content:</b> Address common search queries in your niche</li>
+        </ul></div>
+    `;
+    document.getElementById('modal').classList.add('active');
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('active'); }
+document.getElementById('modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+function applyFilters() {
+    const all = getAllKeywords().filter(k => isFiltered(k));
+    renderTable(all);
+}
+
+function resetFilters() {
+    document.getElementById('clusterFilter').value = '';
+    document.getElementById('kdFilter').value = '';
+    document.getElementById('searchFilter').value = '';
+    applyFilters();
+}
+
+function printSelected() {
+    if (selected.size === 0) { alert('No keywords selected'); return; }
+    const all = getAllKeywords();
+    const sel = all.filter(k => selected.has(k.name));
+    let w = window.open('','_blank');
+    w.document.write('<html><head><title>Selected Keywords</title><style>');
+    w.document.write('body{font-family:sans-serif;padding:2rem;}table{width:100%;border-collapse:collapse;}th,td{padding:0.5rem;border:1px solid #ddd;text-align:left;font-size:0.85rem;}th{background:#f5f5f5;}');
+    w.document.write('</style></head><body>');
+    w.document.write('<h2>Selected Keywords for Phase 2</h2>');
+    w.document.write(`<p>${sel.length} keywords | Total volume: ${sel.reduce((s,k)=>s+k.search,0).toLocaleString()} | Est. time: ${sel.reduce((s,k)=>s+k.time,0).toFixed(1)}h</p>`);
+    w.document.write('<table><tr><th>Keyword</th><th>Cluster</th><th>Volume</th><th>CPC</th><th>KD</th><th>Trend</th></tr>');
+    sel.forEach(k => {
+        w.document.write(`<tr><td>${k.name}</td><td>${k.cluster}</td><td>${k.search.toLocaleString()}</td><td>$${k.cpc.toFixed(2)}</td><td>${k.kd===null?'N/A':k.kd}</td><td>${k.trend}</td></tr>`);
+    });
+    w.document.write('</table></body></html>');
+    w.document.close();
+}
+
+// Populate cluster filter
+const clusters = [...new Set(Object.keys(clusterData))];
+clusters.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    document.getElementById('clusterFilter').appendChild(opt);
+});
+
+// Update stats
+const allKw = getAllKeywords();
+const totalTime = allKw.reduce((s, k) => s + k.time, 0);
+const bufferTime = totalTime * 1.15;
+document.getElementById('totalHours').textContent = bufferTime.toFixed(1) + 'h';
+document.getElementById('baseHours').textContent = totalTime.toFixed(1) + 'h';
+document.getElementById('kwCount').textContent = allKw.length;
+document.getElementById('avgHours').textContent = (totalTime / allKw.length).toFixed(1) + 'h';
+
+document.getElementById('clusterFilter').addEventListener('change', applyFilters);
+document.getElementById('kdFilter').addEventListener('change', applyFilters);
+document.getElementById('searchFilter').addEventListener('input', applyFilters);
+
+renderTable(getAllKeywords());
+</script>
+</body>
+</html>
