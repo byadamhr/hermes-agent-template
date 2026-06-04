@@ -36,7 +36,7 @@ curl -H "X-Access-Token: $MANGOOLS_API_TOKEN" "https://api.mangools.com/v3/kwfin
 
 **Check remaining quota:** `GET /v3/kwfinder/limits` — returns `limit`, `remaining`, `reset` (seconds) for every resource type.
 
-**Strategy:** Use Import endpoint for bulk volume data (most efficient). Use individual keyword endpoint only for SERP data. Always check limits before expensive requests.
+**Strategy:** related-keywords endpoint is most efficient (1 request = hundreds of results with sv/cpc/kd already included). Always specify location_id + language_id. Cap at 100 keywords per run. Do SERP lookups for actual KD/intent/content data.
 
 ## KWFinder Endpoints
 
@@ -208,38 +208,44 @@ Location object includes: `_id`, `name`, `country_code`, `canonical_name`, `labe
 
 | Location | ID | Language | ID |
 |----------|-----|----------|-----|
-| Romania | 2534 | Romanian | 47 |
+| Romania | 2642 | Romanian | 47 |
 | USA | 2840 | English | 1000 |
-| UK | 2688 | English | 1000 |
-| Germany | 2736 | German | — |
-| France | 2712 | French | — |
+| UK | 2826 | English | 1000 |
+| Germany | 2276 | German | — |
+| France | 2250 | French | — |
 | Global | 0 | — | 0 |
 
 **Always verify IDs** using `/mangools/locations?query=...` before making requests.
 
-## Workflow: Seed → Expand → Cluster → Report
+## Workflow: Seed → Expand → Filter → SERP → Report
 
-### Step 1: Seed Keywords
-Start with 5-15 seed keywords relevant to the product/service/niche.
+**IMPORTANT:** Always specify `location_id` and `language_id` on every request for optimal output.
 
-### Step 2: Get Suggestions for Each Seed
-Call `GET /v3/kwfinder/related-keywords?kw={seed}&location_id={loc}&language_id={lang}` for each seed.
-- Returns up to 10,000 related keywords
-- Filter: keep keywords with `sv` ≥ 500 (adjust threshold per niche)
+### Step 1: Check Limits
+Always check `/v3/kwfinder/limits` first. Budget: max 100 keywords per run.
 
-### Step 3: Bulk Volume Check
-For all qualifying keywords, call `POST /v3/kwfinder/keyword-imports` to get `sv`, `cpc`, `ppc`, `seo` (KD), and `msv` (monthly history) in bulk.
-- Most efficient use of API credits
-- Up to 700 keywords per request (Premium/Agency)
+### Step 2: Seed Expansion (1 request per seed)
+Call `GET /v3/kwfinder/related-keywords?kw={seed}&location_id={loc}&language_id={lang}` for each seed keyword.
+- Returns hundreds of related keywords with `sv`, `cpc`, `ppc`, `seo` (KD), `msv` already included
+- Each seed is ONE API request — this is the most efficient endpoint
 
-### Step 4: Get SERP Data (Selectively)
-For keywords needing full competitive analysis, call `GET /v3/kwfinder/serps?kw={keyword}&location_id={loc}` to get:
-- Top 10 organic results with DA/PA/CF/TF
-- SERP features present
+### Step 3: Filter & Cap (no API calls)
+From the combined results across all seeds:
+1. **Exclude** keywords with `sv` < 150
+2. **Keep** keywords with `sv` ≥ 100 (but < 150 are excluded per rule above)
+3. **Sort** by `sv` descending
+4. **Cap** at 100 total keywords. If N seeds, each seed gets `floor(100/N)` slots (minimum 10 per seed)
+5. **Deduplicate** — if same keyword appears from multiple seeds, keep the highest-sv entry
+
+### Step 4: SERP Lookups for Full List (bulk)
+For EACH keyword in the filtered list, call `GET /v3/kwfinder/serps?kw={keyword}&location_id={loc}&language_id={lang}` to get:
+- Actual KD (the `seo` field from related-keywords is cached and may be stale/null)
+- SERP features present (determines intent classification)
+- Content types ranking (determines content type classification)
+- DA/PA/CF/TF of top results
 - CTR per position
-- Above-the-fold visibility
 
-**Budget tip:** SERP lookups are separate from keyword lookups. Use sparingly — check `/v3/kwfinder/limits` first.
+**Budget tip:** SERP lookups are separate quota from keyword lookups. Check limits. If quota is tight, prioritize top-volume keywords.
 
 ### Step 5: Classify & Cluster
 Group keywords into thematic clusters. Classify each keyword by:
@@ -337,54 +343,26 @@ API_KEY = os.environ["MANGOOLS_API_TOKEN"]
 BASE_URL = "https://api.mangools.com/v3"
 HEADERS = {"X-Access-Token": API_KEY}
 
-def related_keywords(kw, location_id=0, language_id=0):
-    """Get up to 10,000 related keywords from a seed."""
+def related_keywords(kw, location_id, language_id):
+    """Get related keywords from a seed. Returns hundreds with sv/cpc/kd."""
     resp = requests.get(f"{BASE_URL}/kwfinder/related-keywords",
         headers=HEADERS, params={"kw": kw, "location_id": location_id, "language_id": language_id})
     resp.raise_for_status()
-    return resp.json()  # → {"keywords": [...], "location": {...}, "language": {...}}
+    return resp.json()
 
-def keyword_imports(keywords, location_id, language_id):
-    """Bulk keyword details (up to 700). Most efficient endpoint."""
-    resp = requests.post(f"{BASE_URL}/kwfinder/keyword-imports",
-        headers=HEADERS, json={"keywords": keywords, "location_id": location_id, "language_id": language_id})
+def kwfinder_serps(kw, location_id, language_id, platform_id=1):
+    """Get SERP with actual KD, intent, content type data."""
+    resp = requests.get(f"{BASE_URL}/kwfinder/serps",
+        headers=HEADERS, params={"kw": kw, "location_id": location_id,
+                                  "language_id": language_id, "platform_id": platform_id})
     resp.raise_for_status()
-    return resp.json()  # → {"keywords": [{"kw", "sv", "cpc", "ppc", "seo", "msv", "_id"}, ...]}
+    return resp.json()
 
-def kwfinder_serps(kw, location_id=2840, language_id=None, platform_id=1):
-    """Get SERP with full metrics for a keyword."""
-    params = {"kw": kw, "location_id": location_id, "platform_id": platform_id}
-    if language_id: params["language_id"] = language_id
-    resp = requests.get(f"{BASE_URL}/kwfinder/serps", headers=HEADERS, params=params)
-    resp.raise_for_status()
-    return resp.json()  # → items[], ctr[], results, serpFeaturesImpact
-
-def serpchecker_serps(kw, location_id, platform_id=1):
+def serpchecker_serps(kw, location_id, language_id, platform_id=1):
     """Get SERP with 50+ SEO metrics per result."""
     resp = requests.get(f"{BASE_URL}/serpchecker/serps",
-        headers=HEADERS, params={"kw": kw, "location_id": location_id, "platform_id": platform_id})
-    resp.raise_for_status()
-    return resp.json()
-
-def serpchecker_reset(kw, location_id, platform_id=1):
-    """Force fresh SERP fetch."""
-    resp = requests.get(f"{BASE_URL}/serpchecker/serps/reset",
-        headers=HEADERS, params={"kw": kw, "location_id": location_id, "platform_id": platform_id})
-    resp.raise_for_status()
-    return resp.json()
-
-def url_metrics(url):
-    """Get DA/PA/CF/TF for a URL."""
-    resp = requests.get(f"{BASE_URL}/serpchecker/url-metrics",
-        headers=HEADERS, params={"url": url})
-    resp.raise_for_status()
-    return resp.json()
-
-def gap_analysis(domain, competitors, location_id, page=1):
-    """Find competitor keywords you're missing."""
-    resp = requests.post(f"{BASE_URL}/kwfinder/gap-analysis",
-        headers=HEADERS, json={"domain": domain, "competitors": competitors,
-                               "location_id": location_id, "page": page})
+        headers=HEADERS, params={"kw": kw, "location_id": location_id,
+                                  "language_id": language_id, "platform_id": platform_id})
     resp.raise_for_status()
     return resp.json()
 
@@ -392,14 +370,45 @@ def check_limits():
     """Check remaining API quota."""
     resp = requests.get(f"{BASE_URL}/kwfinder/limits", headers=HEADERS)
     resp.raise_for_status()
-    return resp.json()  # → {"resources": {"related-keywords": {"limit", "remaining", "reset"}, ...}}
+    return resp.json()
 
 def search_locations(query):
     """Find location IDs by name."""
     resp = requests.get(f"{BASE_URL}/mangools/locations",
         headers=HEADERS, params={"query": query})
     resp.raise_for_status()
-    return resp.json()  # → [{ "_id", "name", "country_code", "canonical_name", "label", ... }]
+    return resp.json()
+
+def filter_and_cap(keywords, max_total=100, min_sv=150):
+    """Filter keywords: sv >= 100, exclude sv < 150, cap at max_total."""
+    # Exclude sv < 150
+    filtered = [k for k in keywords if k.get('sv', 0) >= min_sv]
+    # Sort by sv descending
+    filtered.sort(key=lambda x: x.get('sv', 0), reverse=True)
+    # Cap
+    return filtered[:max_total]
+
+def classify_intent(kw, serp_data):
+    """Classify search intent from SERP features."""
+    intents = []
+    items = serp_data.get('items', [])
+    types = [i.get('type', '') for i in items]
+    if 'SHOP_RESULTS' in types:
+        intents.append('T')
+    if any(t in types for t in ['VIDEO_PANEL', 'NEWS_PACK', 'IMG_PACK']):
+        intents.append('I')
+    if 'LOCAL_PACK' in types:
+        intents.append('N')
+    if not intents:
+        intents.append('C')
+    return intents
+
+def estimate_time(kd):
+    """Estimate optimization hours based on KD."""
+    if kd is None: return 3.5
+    if kd <= 10: return 3.25
+    if kd <= 15: return 4.0
+    return 5.0
 ```
 
 ## Response Field Reference
@@ -446,14 +455,17 @@ def search_locations(query):
 4. **KD field is `seo`** (not `keyword_difficulty`). Scale is 1-100. May be `null` for new/low-volume keywords.
 5. **Trends endpoint is deprecated** since Jan 2025. Use `msv` monthly history from keyword-imports.
 6. **Deduplication within 24h** — identical requests don't count as new lookups. Use this to your advantage.
-7. **Import endpoint is most efficient** — bulk volume data in one call. Never use individual keyword endpoint for volume-only needs.
+7. **related-keywords is the primary endpoint** — returns hundreds of results with sv/cpc/kd in ONE request. Never use keyword-imports unless you have raw keyword lists from external sources.
 8. **SERP lookups are separate quota** from keyword lookups. Check `/v3/kwfinder/limits` before expensive requests.
-9. **Location IDs are numeric** (not country codes). Always verify with `/mangools/locations?query=...`.
+9. **Location IDs are numeric** (not country codes). Always verify with `/mangools/locations?query=...`. Romania=2642, USA=2840, UK=2826, Germany=2276, France=2250.
 10. **CPC is in USD.** Format as `$X.XX` in reports.
 11. **`msv` array format:** `[year, month, volume]` — e.g., `[2015, 8, 590]`. Parse carefully for trend analysis.
 12. **SERP snapshot stored 60 days.** Use `serp_snapshot_id` to retrieve via `/serpchecker/serps/{id}/snapshot`.
 13. **Gap analysis `competitors` array:** 1-5 domains only. `page` parameter is Premium/Agency only.
 14. **Keywords endpoint for CSV export** requires `_id` values from previous lookups — not raw keyword strings.
+15. **Always specify location_id and language_id** on related-keywords requests for accurate, localized results.
+16. **Filtering rules:** Include keywords with sv ≥ 100. Exclude keywords with sv < 150. Cap total at 100 keywords per run.
+17. **SERP lookups for full list** — the `seo` (KD) field from related-keywords is cached and may be null. Do SERP lookups to get actual KD, intent, and content type data.
 
 ## Verification
 
