@@ -171,7 +171,7 @@ GET /v3/serpchecker/serps/{serp_id}/snapshot
 3. **Filter** — exclude sv < 150, sort descending. Include ALL qualifying keywords — no cap. If the filtered list exceeds 700, split into chunks of 700 for the next step.
 4. **Bulk import** — 1× `keyword-imports` POST per chunk of up to 700 keywords. Returns updated KD, CPC, SV, MSV for all keywords. If >700 keywords, make multiple calls (each costs 10 lookups).
 5. **Classify & cluster** — infer intent from keyword patterns + CPC. Derive trend from MSV history. Group into thematic clusters.
-6. **Generate HTML report** — using `templates/keyword-report.html`. Mark intent/content as inferred (not SERP-verified). Add date timestamp to filename: `kw-research-skill-{YYYYMMDD_HHMMSS}.html`.
+6. **Generate HTML report** — using `templates/keyword-report.html`. Output to `/data/media/kw-research-skill-{YYYYMMDD_HHMMSS}.html`. Mark intent/content as inferred (not SERP-verified).
 
 **Total cost:** N seeds + 1 import = N+1 API requests (e.g. 7 seeds = 8 requests = 80 lookups).
 
@@ -395,7 +395,7 @@ for kw in filtered:
 11. **`msv` array format:** `[year, month, volume]` — e.g., `[2024, 1, 9900]`. Use for trend analysis (compare last 6mo vs prior 6mo).
 12. **No cap on filtered keywords** — after sv ≥ 150 filter, include ALL qualifying keywords. If >700, split into chunks of 700 for keyword-imports. The 700 limit is per-request, not per-day.
 13. **Phase 2 cost model** — `kwfinder/serps` is per-keyword only (GET with single `kw`). 1 call = 1 keyword = 10 lookups from daily quota. There is NO bulk SERP endpoint. Plan Phase 2 budget accordingly: 20 keywords = 200 lookups.
-14. **Report filename** — use `kw-research-skill-{YYYYMMDD_HHMMSS}.html` format with date timestamp. Include timestamp in the report header/subtitle as well.
+14. **Report filename** — save to `/data/media/kw-research-skill-{YYYYMMDD_HHMMSS}.html`. All outputs go to `/data/media/` alongside uploads.
 15. **Use BROAD category seeds, not brand+category combos.** This is the most expensive mistake. "pampers" returns 595 related keywords; "pampers seni" returns only 6. The related-keywords endpoint discovers brand variants naturally — "pampers" will return "pampers seni", "pampers premium care", "tena seni", "huggies", etc. When a user provides a list like "PAMPERS SENI, TENA, MOFFY, KANZ", extract the BROAD category term ("pampers") as the seed, NOT each brand+category combo. Brands show up as related keywords. One broad seed per cluster is sufficient.
 16. **Handle None `sv` values safely.** Some keywords from the API have `sv: None` (not 0). Use `(kw.get("sv") or 0)` for comparisons, NOT `kw.get("sv", 0)` — the latter returns None when sv is explicitly None, causing `>` comparison errors with int. Always guard: `filtered = [kw for kw in all_kw.values() if (kw.get("sv") or 0) >= MIN_SV]`.
 17. **Rate-limit retry on keyword-imports.** The bulk import endpoint can return 429 even within daily quota (per-minute limits). Add retry with `Retry-After` header backoff: check `r.headers.get("Retry-After", 15)` and sleep before retrying. Don't treat 429 as fatal.
@@ -493,7 +493,8 @@ report = template.replace(PLACEHOLDER, js_block)
 # Update title/subtitle
 report = report.replace("<title>Keyword Research Report</title>",
                         f"<title>kw-research-skill-{TS}</title>")
-Path(f"kw-research-skill-{TS}.html").write_text(report)
+Path("/data/media").mkdir(parents=True, exist_ok=True)
+Path(f"/data/media/kw-research-skill-{TS}.html").write_text(report)
 ```
 
 ## Verification

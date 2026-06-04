@@ -70,7 +70,7 @@ HERMES_DASHBOARD_PORT = int(os.environ.get("HERMES_DASHBOARD_PORT", "9119"))
 HERMES_DASHBOARD_URL = f"http://{HERMES_DASHBOARD_HOST}:{HERMES_DASHBOARD_PORT}"
 
 # ── File upload ────────────────────────────────────────────────────────────────
-UPLOAD_DIR = Path(HERMES_HOME) / "uploads"
+UPLOAD_DIR = Path("/data/media")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
