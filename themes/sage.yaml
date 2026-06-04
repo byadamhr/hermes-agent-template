@@ -1,0 +1,26 @@
+name: sage
+label: Sage
+description: Warm cream and olive — soft, earthy light theme
+palette:
+  background:
+    hex: "#f5f0e3"
+    alpha: 1.0
+  midground:
+    hex: "#2d3a1f"
+    alpha: 1.0
+  foreground:
+    hex: "#ffffff"
+    alpha: 0.0
+  warmGlow: "rgba(120, 160, 100, 0.12)"
+  noiseOpacity: 0.3
+typography:
+  fontSans: '"Fraunces", Georgia, "Times New Roman", serif'
+  fontMono: '"DM Mono", ui-monospace, "SF Mono", Menlo, monospace'
+  fontUrl: "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=DM+Mono:wght@400;500&display=swap"
+layout:
+  radius: "0.75rem"
+  density: "comfortable"
+colorOverrides:
+  destructive: "#b91c1c"
+  warning: "#a16207"
+  success: "#15803d"

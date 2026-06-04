@@ -247,6 +247,11 @@ def write_config_yaml(data: dict[str, str]) -> None:
 
     merged["data_dir"] = HERMES_HOME
 
+    # Default personality — "philosopher" for this deployment.
+    merged_display = dict(merged.get("display") if isinstance(merged.get("display"), dict) else {})
+    merged_display.setdefault("personality", "philosopher")
+    merged["display"] = merged_display
+
     # Custom OpenAI-compatible endpoint — write custom_providers block when configured,
     # remove it when not (safe on Railway where users don't hand-edit config.yaml).
     custom_base_url = data.get("CUSTOM_PROVIDER_BASE_URL", "").strip()
@@ -303,6 +308,43 @@ def write_env(path: Path, data: dict[str, str]) -> None:
         lines.append("")
 
     path.write_text("\n".join(lines))
+
+
+# ── Bundled assets (themes + skills) ─────────────────────────────────────────
+_BUNDLED_THEMES_DIR = Path(__file__).parent / "themes"
+_BUNDLED_SKILLS_DIR = Path(__file__).parent / "skills"
+
+
+def deploy_bundled_assets() -> None:
+    """Copy bundled dashboard themes and skills into ~/.hermes/ on startup.
+
+    Themes go to ~/.hermes/dashboard-themes/ (Hermes dashboard reads them).
+    Skills go to ~/.hermes/skills/ (Hermes agent reads them).
+    Only copies if the destination doesn't already exist (user customizations
+    are never overwritten).
+    """
+    hermes_home = Path(HERMES_HOME)
+
+    # Dashboard themes
+    themes_dest = hermes_home / "dashboard-themes"
+    if _BUNDLED_THEMES_DIR.is_dir():
+        themes_dest.mkdir(parents=True, exist_ok=True)
+        for src in _BUNDLED_THEMES_DIR.glob("*.yaml"):
+            dst = themes_dest / src.name
+            if not dst.exists():
+                dst.write_bytes(src.read_bytes())
+                print(f"[deploy] theme {src.name} -> {dst}", flush=True)
+
+    # Skills (recursive copy, preserve directory structure)
+    if _BUNDLED_SKILLS_DIR.is_dir():
+        for skill_md in _BUNDLED_SKILLS_DIR.rglob("SKILL.md"):
+            # Preserve relative path: skills/software-development/change-tracking/SKILL.md
+            rel = skill_md.relative_to(_BUNDLED_SKILLS_DIR)
+            dst = hermes_home / "skills" / rel
+            if not dst.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(skill_md.read_bytes())
+                print(f"[deploy] skill {rel.parent} -> {dst.parent}", flush=True)
 
 
 # ── xAI Grok SuperGrok OAuth (Device Code — RFC 8628) ───────────────────────
@@ -1426,6 +1468,8 @@ async def auto_start():
 
 @asynccontextmanager
 async def lifespan(app):
+    # Deploy bundled themes and skills before anything else starts.
+    deploy_bundled_assets()
     # Dashboard runs always — it's the user-facing UI after setup is done,
     # and it's independent of gateway state.
     asyncio.create_task(dash.start())
