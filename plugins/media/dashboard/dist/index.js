@@ -563,6 +563,13 @@
     var _s5 = useState(0);
     var uploadTotal = _s5[0];
     var setUploadTotal = _s5[1];
+    var _s6 = useState(null);
+    // success: { path, name, size, count } or null
+    var success = _s6[0];
+    var setSuccess = _s6[1];
+    var _s7 = useState(false);
+    var copied = _s7[0];
+    var setCopied = _s7[1];
     var fileRef = useRef(null);
 
     function uploadOne(file) {
@@ -582,6 +589,8 @@
       for (var i = 0; i < files.length; i++) arr.push(files[i]);
       setUploading(true);
       setError(null);
+      setSuccess(null);
+      setCopied(false);
       setUploadProgress(0);
       setUploadTotal(arr.length);
 
@@ -589,10 +598,15 @@
       // report progress accurately.
       var chain = Promise.resolve();
       var firstError = null;
+      var lastResult = null;
+      var uploadedCount = 0;
       arr.forEach(function (file, idx) {
         chain = chain.then(function () {
           setUploadProgress(idx + 1);
-          return uploadOne(file).catch(function (err) {
+          return uploadOne(file).then(function (data) {
+            lastResult = data;
+            uploadedCount++;
+          }).catch(function (err) {
             if (!firstError) firstError = file.name + ": " + (err.message || "failed");
           });
         });
@@ -601,7 +615,25 @@
         setUploading(false);
         setUploadProgress(0);
         setUploadTotal(0);
-        if (firstError) setError(firstError);
+        if (firstError) {
+          setError(firstError);
+          // If some succeeded too, still show partial success
+          if (lastResult && uploadedCount > 0) {
+            setSuccess({
+              path: lastResult.path,
+              name: lastResult.name,
+              size: lastResult.size,
+              count: uploadedCount,
+            });
+          }
+        } else if (lastResult) {
+          setSuccess({
+            path: lastResult.path,
+            name: lastResult.name,
+            size: lastResult.size,
+            count: uploadedCount,
+          });
+        }
         onUploaded();
       });
     }
@@ -625,11 +657,37 @@
       setDragging(false);
     }
 
+    function copyPath() {
+      if (!success || !success.path) return;
+      navigator.clipboard.writeText(success.path).then(function () {
+        setCopied(true);
+        setTimeout(function () { setCopied(false); }, 2000);
+      }).catch(function () {
+        // Fallback: select the text
+        var el = document.querySelector(".hermes-media-upload-success-path code");
+        if (el) {
+          var range = document.createRange();
+          range.selectNodeContents(el);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      });
+    }
+
     var statusText = uploading
       ? (uploadTotal > 1
           ? "Uploading " + uploadProgress + " / " + uploadTotal + "…"
           : "Uploading…")
       : null;
+
+    var successLabel = success && success.count > 1
+      ? success.count + " files uploaded"
+      : "File saved";
+
+    var hintCommand = success && success.path
+      ? "read " + success.path
+      : "";
 
     return h("div", { className: "hermes-media-upload" },
       h("div", {
@@ -663,6 +721,27 @@
             ),
       ),
       error && h("div", { className: "hermes-media-upload-error" }, error),
+      // Upload success confirmation
+      success && !uploading && h("div", { className: "heres-media-upload-success" },
+        h("div", { className: "hermes-media-upload-success-label" },
+          "✅ ", successLabel,
+        ),
+        h("div", { className: "hermes-media-upload-success-path" },
+          h("code", null, success.path),
+        ),
+        h("button", {
+          className: "hermes-media-copy-btn" + (copied ? " copied" : ""),
+          onClick: copyPath,
+        }, copied ? "✅ Copied!" : "📋 Copy path to clipboard"),
+        h("div", { className: "hermes-media-upload-success-hint" },
+          "Paste in chat: ",
+          h("code", null, hintCommand),
+        ),
+        h("button", {
+          className: "hermes-media-upload-success-dismiss",
+          onClick: function () { setSuccess(null); setCopied(false); },
+        }, "dismiss"),
+      ),
     );
   }
 

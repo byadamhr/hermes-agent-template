@@ -12,15 +12,28 @@
    some themes.  Override to full-contrast card-foreground.
    ================================================================ */
 
+/* All sidebar text — nav items, section headings, badges, labels */
 .sidebar [class*="text-text-secondary"],
-.sidebar [class*="text-text-tertiary"] {
+.sidebar [class*="text-text-tertiary"],
+.sidebar [class*="text-muted"],
+.sidebar [class*="opacity-"],
+.sidebar span,
+.sidebar a,
+.sidebar div {
   color: var(--color-card-foreground) !important;
+  opacity: 1 !important;
 }
 
 /* Plugin nav section headings (e.g. "Plugins", "System") */
 #hermes-sidebar-plugin-nav-heading {
   color: var(--color-card-foreground) !important;
-  opacity: 0.7;
+  opacity: 1 !important;
+}
+
+/* Sidebar nav link hover / active states */
+.sidebar a:hover,
+.sidebar a:focus {
+  opacity: 1 !important;
 }
 
 .hermes-media {
@@ -609,4 +622,106 @@
   margin-top: 0.4rem;
   font-size: 0.8rem;
   color: #ef4444;
+}
+
+/* ================================================================
+   Upload success confirmation
+   Shows after a file is uploaded — file path + copy button
+   ================================================================ */
+
+.heres-media-upload-success {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--color-card, #1f2937);
+  border: 1px solid #22c55e;
+  border-radius: var(--radius, 0.5rem);
+  animation: hermes-media-fade-in 0.2s ease;
+}
+
+@keyframes hermes-media-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hermes-media-upload-success-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #22c55e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.hermes-media-upload-success-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: #22c55e;
+  background: var(--color-muted, #111827);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  word-break: break-all;
+  margin-bottom: 0.5rem;
+  user-select: all;
+}
+
+.hermes-media-upload-success-path code {
+  user-select: all;
+}
+
+.hermes-media-copy-btn {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: var(--color-primary, #6366f1);
+  color: #fff;
+  transition: background 0.15s;
+}
+
+.hermes-media-copy-btn:hover {
+  background: var(--color-accent, #818cf8);
+}
+
+.hermes-media-copy-btn.copied {
+  background: #22c55e;
+}
+
+.hermes-media-upload-success-hint {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  border-top: 1px solid var(--color-border, #374151);
+  padding-top: 0.5rem;
+  line-height: 1.6;
+}
+
+.hermes-media-upload-success-hint code {
+  color: var(--color-card-foreground, #e5e7eb);
+  background: var(--color-muted, #111827);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.hermes-media-upload-success-dismiss {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.hermes-media-upload-success-dismiss:hover {
+  color: var(--color-card-foreground, #e5e7eb);
 }
