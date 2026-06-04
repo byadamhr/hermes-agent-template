@@ -29,7 +29,9 @@ injected into every proxied HTML response so users can always return to the wiza
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import mimetypes
 import os
 import re
 import secrets
@@ -66,6 +68,11 @@ PAIRING_TTL = 3600
 HERMES_DASHBOARD_HOST = "127.0.0.1"
 HERMES_DASHBOARD_PORT = int(os.environ.get("HERMES_DASHBOARD_PORT", "9119"))
 HERMES_DASHBOARD_URL = f"http://{HERMES_DASHBOARD_HOST}:{HERMES_DASHBOARD_PORT}"
+
+# ── File upload ────────────────────────────────────────────────────────────────
+UPLOAD_DIR = Path(HERMES_HOME) / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # Mirror dashboard-ref-only/auth_proxy.py: strip only `host` (httpx sets it)
 # and `transfer-encoding` (httpx recomputes it from the body). Keep everything
@@ -1111,6 +1118,171 @@ async def api_pairing_revoke(request: Request):
 
 
 # ── Reverse proxy → Hermes dashboard ──────────────────────────────────────────
+_UPLOAD_PAGE_HTML = """<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hermes Agent — Upload File</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0f14;color:#c9d1d9;font-family:'IBM Plex Sans',sans-serif;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#14181f;border:1px solid #252d3d;border-radius:12px;padding:36px 32px;width:100%;max-width:480px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.4)}
+.brand{text-align:center;margin-bottom:28px}
+.brand-logo{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:18px;color:#6272ff}
+.brand-logo span{color:#6b7688;font-weight:400}
+.brand-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6b7688;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase}
+.drop-zone{border:2px dashed #252d3d;border-radius:10px;padding:40px 20px;text-align:center;
+  cursor:pointer;transition:all 0.2s;margin-bottom:20px;position:relative}
+.drop-zone:hover,.drop-zone.dragover{border-color:#6272ff;background:rgba(98,114,255,0.05)}
+.drop-icon{font-size:40px;margin-bottom:12px;opacity:0.5}
+.drop-text{font-family:'IBM Plex Mono',monospace;font-size:13px;color:#6b7688}
+.drop-text strong{color:#c9d1d9}
+.file-input{display:none}
+.result{background:#0d0f14;border:1px solid #252d3d;border-radius:8px;padding:16px;margin-top:16px;display:none}
+.result.show{display:block}
+.result-label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6b7688;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.result-path{font-family:'IBM Plex Mono',monospace;font-size:13px;color:#3fb950;word-break:break-all;
+  background:#1c2230;padding:10px 12px;border-radius:6px;margin-bottom:12px;position:relative}
+.result-path code{user-select:all}
+.copy-btn{background:#6272ff;border:none;color:white;font-family:'IBM Plex Mono',monospace;font-size:12px;
+  padding:8px 16px;border-radius:6px;cursor:pointer;transition:background 0.15s;width:100%}
+.copy-btn:hover{background:#7b8fff}
+.copy-btn.copied{background:#3fb950}
+.instructions{margin-top:16px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6b7688;
+  line-height:1.8;border-top:1px solid #252d3d;padding-top:16px}
+.instructions code{color:#c9d1d9;background:#1c2230;padding:2px 6px;border-radius:4px}
+.back-link{display:inline-block;margin-top:20px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+  color:#6272ff;text-decoration:none;border:1px solid #252d3d;border-radius:6px;padding:7px 14px;
+  transition:border-color 0.15s}
+.back-link:hover{border-color:#6272ff}
+.error{color:#f85149;font-family:'IBM Plex Mono',monospace;font-size:12px;margin-top:12px;display:none}
+.error.show{display:block}
+</style></head><body>
+<div class="card">
+  <div class="brand">
+    <div class="brand-logo">hermes <span>upload</span></div>
+    <div class="brand-sub">share a file with your agent</div>
+  </div>
+  <div class="drop-zone" id="dropZone">
+    <div class="drop-icon">📄</div>
+    <div class="drop-text">Drag & drop a file here<br>or <strong>click to browse</strong></div>
+    <input type="file" class="file-input" id="fileInput">
+  </div>
+  <div class="error" id="error"></div>
+  <div class="result" id="result">
+    <div class="result-label">File saved</div>
+    <div class="result-path"><code id="filePath"></code></div>
+    <button class="copy-btn" id="copyBtn" onclick="copyPath()">📋 Copy path to clipboard</button>
+    <div class="instructions">
+      Paste this in the chat tab:<br>
+      <code id="cmdExample"></code>
+    </div>
+  </div>
+  <a href="/" class="back-link">← Back to dashboard</a>
+</div>
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const result = document.getElementById('result');
+const error = document.getElementById('error');
+const filePath = document.getElementById('filePath');
+const cmdExample = document.getElementById('cmdExample');
+const copyBtn = document.getElementById('copyBtn');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files.length) uploadFile(fileInput.files[0]); });
+
+async function uploadFile(file) {
+  error.classList.remove('show');
+  result.classList.remove('show');
+  copyBtn.classList.remove('copied');
+  copyBtn.textContent = '📋 Copy path to clipboard';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const resp = await fetch('/upload', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok) { error.textContent = data.error || 'Upload failed'; error.classList.add('show'); return; }
+    filePath.textContent = data.path;
+    cmdExample.textContent = 'read ' + data.path;
+    result.classList.add('show');
+  } catch(e) {
+    error.textContent = 'Upload failed: ' + e.message;
+    error.classList.add('show');
+  }
+}
+
+function copyPath() {
+  const text = filePath.textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    copyBtn.textContent = '✅ Copied!';
+    copyBtn.classList.add('copied');
+    setTimeout(() => { copyBtn.textContent = '📋 Copy path to clipboard'; copyBtn.classList.remove('copied'); }, 2000);
+  });
+}
+</script></body></html>"""
+
+
+async def page_upload(request: Request) -> Response:
+    """File upload page — drag & drop or click to upload."""
+    if err := guard(request):
+        return err
+    return HTMLResponse(_UPLOAD_PAGE_HTML)
+
+
+async def api_upload(request: Request) -> Response:
+    """Accept a multipart file upload and save to ~/.hermes/uploads/."""
+    if err := guard(request):
+        return err
+
+    content_type = request.headers.get("content-type", "")
+    if "multipart/form-data" not in content_type:
+        return JSONResponse({"error": "Expected multipart/form-data"}, status_code=400)
+
+    try:
+        form = await request.form()
+    except Exception:
+        return JSONResponse({"error": "Failed to parse form data"}, status_code=400)
+
+    upload = form.get("file")
+    if not upload:
+        return JSONResponse({"error": "No file provided"}, status_code=400)
+
+    # Read file content
+    try:
+        content = await upload.read()
+    except Exception:
+        return JSONResponse({"error": "Failed to read file"}, status_code=400)
+
+    if len(content) > MAX_UPLOAD_SIZE:
+        return JSONResponse({"error": f"File too large (max {MAX_UPLOAD_SIZE // 1024 // 1024}MB)"}, status_code=400)
+
+    # Sanitize filename
+    original_name = upload.filename or "unnamed"
+    stem = Path(original_name).stem[:64]
+    suffix = Path(original_name).suffix[:16]
+    file_hash = hashlib.md5(content).hexdigest()[:8]
+    safe_name = f"{stem}_{file_hash}{suffix}"
+
+    dest = UPLOAD_DIR / safe_name
+    dest.write_bytes(content)
+
+    print(f"[upload] {original_name} -> {dest} ({len(content)} bytes)", flush=True)
+
+    return JSONResponse({"ok": True, "path": str(dest), "name": original_name, "size": len(content)})
+
+
 _WIDGET_LINK_STYLE = (
     "background:rgba(20,24,31,0.92);backdrop-filter:blur(8px);"
     "border:1px solid #252d3d;border-radius:6px;padding:6px 12px;"
@@ -1430,6 +1602,10 @@ routes = [
     Route("/login",                             page_login,          methods=["GET"]),
     Route("/login",                             login_post,          methods=["POST"]),
     Route("/logout",                            logout),
+
+    # File upload page + API (cookie-auth guarded).
+    Route("/upload",                             page_upload,         methods=["GET"]),
+    Route("/upload",                             api_upload,          methods=["POST"]),
 
     # Our setup wizard + management API, all under /setup/* (cookie-auth guarded).
     Route("/setup",                             page_index),
