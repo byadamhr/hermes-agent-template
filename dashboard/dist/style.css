@@ -1,0 +1,612 @@
+/*
+ * Hermes Media — dashboard plugin styles.
+ *
+ * All colors reference theme CSS vars so the plugin reskins with the
+ * active dashboard theme. No hardcoded palette.
+ */
+
+/* ================================================================
+   Global: sidebar nav text visibility
+   The dashboard sidebar uses text-text-secondary (80% opacity) and
+   text-text-tertiary (65% opacity) which can be hard to read on
+   some themes.  Override to full-contrast card-foreground.
+   ================================================================ */
+
+.sidebar [class*="text-text-secondary"],
+.sidebar [class*="text-text-tertiary"] {
+  color: var(--color-card-foreground) !important;
+}
+
+/* Plugin nav section headings (e.g. "Plugins", "System") */
+#hermes-sidebar-plugin-nav-heading {
+  color: var(--color-card-foreground) !important;
+  opacity: 0.7;
+}
+
+.hermes-media {
+  width: 100%;
+  padding: 1rem;
+}
+
+/* ---- Spinner ---- */
+
+.hermes-media-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--color-border, #374151);
+  border-top-color: var(--color-primary, #6366f1);
+  border-radius: 50%;
+  animation: hermes-spin 0.7s linear infinite;
+}
+
+@keyframes hermes-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Header ---- */
+
+.hermes-media-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.hermes-media-header h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-card-foreground);
+  margin: 0;
+}
+
+.hermes-media-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.hermes-media-count {
+  font-size: 0.8rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  background: var(--color-muted, #374151);
+  padding: 0.15rem 0.6rem;
+  border-radius: 9999px;
+}
+
+/* ---- Upload zone ---- */
+
+.hermes-media-upload {
+  margin-bottom: 1rem;
+}
+
+.hermes-media-dropzone {
+  border: 2px dashed var(--color-border, #374151);
+  border-radius: var(--radius, 0.5rem);
+  padding: 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: var(--color-card, #1f2937);
+}
+
+.hermes-media-dropzone:hover,
+.hermes-media-dropzone.dragging {
+  border-color: var(--color-primary, #6366f1);
+  background: color-mix(in srgb, var(--color-primary, #6366f1) 5%, var(--color-card, #1f2937));
+}
+
+.hermes-media-dropzone.dragging {
+  border-style: solid;
+}
+
+.hermes-media-upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  font-size: 0.9rem;
+}
+
+.hermes-media-upload-hint {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.hermes-media-upload-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  font-size: 0.9rem;
+}
+
+.hermes-media-upload-error {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: #ef4444;
+  background: var(--color-card, #1f2937);
+  border: 1px solid #991b1b;
+  border-radius: var(--radius, 0.375rem);
+}
+
+/* ---- Grid layout ---- */
+
+.hermes-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+/* ---- File card ---- */
+
+.hermes-media-card {
+  position: relative;
+  background: var(--color-card, #1f2937);
+  border: 1px solid var(--color-border, #374151);
+  border-radius: var(--radius, 0.5rem);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hermes-media-card:hover {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 1px var(--color-primary, #6366f1);
+}
+
+/* Floating delete button — top-right corner */
+.hermes-media-card-delete {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fca5a5;
+  font-size: 0.85rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+  backdrop-filter: blur(4px);
+}
+
+.hermes-media-card:hover .hermes-media-card-delete {
+  opacity: 1;
+}
+
+.hermes-media-card-delete:hover {
+  background: #991b1b;
+  color: #fff;
+}
+
+/* ---- Preview area ---- */
+
+.hermes-media-preview {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  background: var(--color-muted, #111827);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.hermes-media-preview.clickable {
+  cursor: pointer;
+}
+
+.hermes-media-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.hermes-media-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.hermes-media-preview-icon {
+  color: var(--color-muted-foreground, #6b7280);
+  font-size: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hermes-media-preview-icon span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}
+
+/* Video play overlay */
+.hermes-media-play-overlay {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* ---- Card info ---- */
+
+.hermes-media-info {
+  padding: 0.65rem 0.75rem;
+  flex: 1;
+  cursor: pointer;
+}
+
+.hermes-media-filename {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-card-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0 0 0.25rem 0;
+}
+
+.hermes-media-meta {
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+/* ---- Card actions ---- */
+
+.hermes-media-actions {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--color-border, #374151);
+}
+
+.hermes-media-actions button {
+  flex: 1;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: var(--radius, 0.375rem);
+  cursor: pointer;
+  border: 1px solid var(--color-border, #374151);
+  background: var(--color-secondary, #1f2937);
+  color: var(--color-secondary-foreground, #e5e7eb);
+  transition: background 0.15s ease;
+}
+
+.hermes-media-actions button:hover {
+  background: var(--color-accent, #374151);
+}
+
+.hermes-media-actions button.danger {
+  color: #ef4444;
+}
+
+.hermes-media-actions button.danger:hover {
+  background: #7f1d1d;
+  border-color: #991b1b;
+}
+
+/* ---- Empty / Loading / Error ---- */
+
+.hermes-media-empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--color-muted-foreground, #9ca3af);
+}
+
+.hermes-media-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.4;
+}
+
+.hermes-media-empty p {
+  margin: 0.25rem 0;
+}
+
+.hermes-media-loading {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  font-size: 0.9rem;
+}
+
+.hermes-media-error {
+  text-align: center;
+  padding: 1.5rem;
+  color: #ef4444;
+  background: var(--color-card, #1f2937);
+  border: 1px solid #991b1b;
+  border-radius: var(--radius, 0.5rem);
+  margin: 1rem 0;
+}
+
+/* ================================================================
+   Preview modal / lightbox
+   ================================================================ */
+
+.hermes-media-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+}
+
+.hermes-preview-modal {
+  background: var(--color-card, #1f2937);
+  border: 1px solid var(--color-border, #374151);
+  border-radius: var(--radius, 0.75rem);
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hermes-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-border, #374151);
+  min-height: 48px;
+}
+
+.hermes-preview-title {
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-foreground, #e5e7eb);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hermes-preview-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: 1rem;
+}
+
+.hermes-preview-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: var(--radius, 0.375rem);
+  cursor: pointer;
+  border: 1px solid var(--color-border, #374151);
+  background: var(--color-secondary, #1f2937);
+  color: var(--color-secondary-foreground, #e5e7eb);
+  transition: background 0.15s;
+}
+
+.hermes-preview-btn:hover {
+  background: var(--color-accent, #374151);
+}
+
+.hermes-preview-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border, #374151);
+  border-radius: var(--radius, 0.375rem);
+  background: var(--color-secondary, #1f2937);
+  color: var(--color-secondary-foreground, #e5e7eb);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.15s;
+}
+
+.hermes-preview-close:hover {
+  background: #7f1d1d;
+  border-color: #991b1b;
+  color: #fff;
+}
+
+.hermes-preview-body {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0a0a0a;
+  min-height: 300px;
+}
+
+.hermes-preview-img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  display: block;
+}
+
+.hermes-preview-video {
+  max-width: 100%;
+  max-height: 70vh;
+  display: block;
+}
+
+.hermes-preview-audio-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 3rem 2rem;
+  color: var(--color-muted-foreground, #9ca3af);
+}
+
+.hermes-preview-text {
+  width: 100%;
+  margin: 0;
+  padding: 1rem 1.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--color-foreground, #e5e7eb);
+  background: transparent;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+  max-height: 65vh;
+}
+
+/* iframe for PDF / HTML preview */
+.hermes-preview-iframe {
+  width: 100%;
+  height: 65vh;
+  border: none;
+  background: #fff;
+}
+
+/* Not-previewable binary files */
+.hermes-preview-not-previewable {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  color: var(--color-foreground, #e5e7eb);
+}
+
+.hermes-preview-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  font-size: 0.9rem;
+}
+
+.hermes-preview-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--color-border, #374151);
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground, #9ca3af);
+}
+
+/* ================================================================
+   Confirm dialog
+   ================================================================ */
+
+.hermes-media-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.hermes-media-confirm-dialog {
+  background: var(--color-card, #1f2937);
+  border: 1px solid var(--color-border, #374151);
+  border-radius: var(--radius, 0.75rem);
+  padding: 1.5rem;
+  max-width: 360px;
+  width: 90%;
+  text-align: center;
+}
+
+.hermes-media-confirm-dialog h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  color: var(--color-foreground, #e5e7eb);
+}
+
+.hermes-media-confirm-dialog p {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  word-break: break-all;
+}
+
+.hermes-media-confirm-buttons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.hermes-media-confirm-buttons button {
+  padding: 0.4rem 1rem;
+  border-radius: var(--radius, 0.375rem);
+  border: 1px solid var(--color-border, #374151);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.hermes-media-confirm-buttons button.cancel {
+  background: var(--color-secondary, #1f2937);
+  color: var(--color-secondary-foreground, #e5e7eb);
+}
+
+.hermes-media-confirm-buttons button.confirm {
+  background: #991b1b;
+  color: #fff;
+  border-color: #7f1d1d;
+}
+
+.hermes-media-confirm-buttons button.confirm:hover {
+  background: #7f1d1d;
+}
+
+/* ---- Rename dialog input ---- */
+
+.hermes-rename-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--color-border, #374151);
+  border-radius: var(--radius, 0.375rem);
+  background: var(--color-background, #111827);
+  color: var(--color-foreground, #e5e7eb);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.hermes-rename-input:focus {
+  border-color: var(--color-primary, #6366f1);
+}
+
+.hermes-rename-error {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: #ef4444;
+}
