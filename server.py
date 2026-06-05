@@ -40,8 +40,6 @@ from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from config import MEDIA_ROOT, MAX_UPLOAD_SIZE
-
 import httpx
 import websockets
 import websockets.exceptions
@@ -71,6 +69,8 @@ HERMES_DASHBOARD_PORT = int(os.environ.get("HERMES_DASHBOARD_PORT", "9119"))
 HERMES_DASHBOARD_URL = f"http://{HERMES_DASHBOARD_HOST}:{HERMES_DASHBOARD_PORT}"
 
 # ── File upload ────────────────────────────────────────────────────────────────
+MEDIA_ROOT = Path("/data/media").resolve()
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 UPLOAD_DIR = MEDIA_ROOT
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
