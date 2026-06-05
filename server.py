@@ -31,7 +31,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import mimetypes
 import os
 import re
 import secrets
@@ -40,6 +39,8 @@ import time
 from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+from config import MEDIA_ROOT, MAX_UPLOAD_SIZE
 
 import httpx
 import websockets
@@ -70,9 +71,8 @@ HERMES_DASHBOARD_PORT = int(os.environ.get("HERMES_DASHBOARD_PORT", "9119"))
 HERMES_DASHBOARD_URL = f"http://{HERMES_DASHBOARD_HOST}:{HERMES_DASHBOARD_PORT}"
 
 # ── File upload ────────────────────────────────────────────────────────────────
-UPLOAD_DIR = Path("/data/media")
+UPLOAD_DIR = MEDIA_ROOT
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # Mirror dashboard-ref-only/auth_proxy.py: strip only `host` (httpx sets it)
 # and `transfer-encoding` (httpx recomputes it from the body). Keep everything
@@ -86,7 +86,10 @@ ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 if not ADMIN_PASSWORD:
     ADMIN_PASSWORD = secrets.token_urlsafe(16)
-    print(f"[server] Admin credentials — username: {ADMIN_USERNAME}  password: {ADMIN_PASSWORD}", flush=True)
+    # Fix #3: Never print the auto-generated password to stdout (it ends up in
+    # Railway logs which are shared with collaborators). The user can retrieve
+    # it from the setup wizard's "reveal" endpoint or set ADMIN_PASSWORD env var.
+    print(f"[server] Admin username: {ADMIN_USERNAME}  (auto-generated password — use /setup to view)", flush=True)
 else:
     print(f"[server] Admin username: {ADMIN_USERNAME}", flush=True)
 
@@ -267,8 +270,22 @@ def write_config_yaml(data: dict[str, str]) -> None:
     else:
         merged.pop("custom_providers", None)
 
-    with config_path.open("w") as f:
-        yaml.safe_dump(merged, f, sort_keys=False, default_flow_style=False)
+    # Fix #19: Atomic write — temp file + rename prevents partial writes on crash.
+    try:
+        import tempfile
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=str(config_path.parent), suffix=".tmp",
+        )
+        try:
+            with os.fdopen(tmp_fd, "w") as f:
+                yaml.safe_dump(merged, f, sort_keys=False, default_flow_style=False)
+            os.replace(tmp_path, str(config_path))
+        except Exception:
+            try: os.unlink(tmp_path)
+            except OSError: pass
+            raise
+    except Exception as e:
+        print(f"[config] Failed to write {config_path}: {e}", flush=True)
 
 
 def write_env(path: Path, data: dict[str, str]) -> None:
@@ -307,7 +324,23 @@ def write_env(path: Path, data: dict[str, str]) -> None:
         lines.extend(sorted(grouped["other"]))
         lines.append("")
 
-    path.write_text("\n".join(lines))
+    # Fix #19: Atomic write — temp file + rename prevents partial writes on crash.
+    # Fix #10: Add error handling for file writes.
+    try:
+        import tempfile
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=str(path.parent), suffix=".tmp",
+        )
+        try:
+            with os.fdopen(tmp_fd, "w") as f:
+                f.write("\n".join(lines))
+            os.replace(tmp_path, str(path))
+        except Exception:
+            try: os.unlink(tmp_path)
+            except OSError: pass
+            raise
+    except Exception as e:
+        print(f"[config] Failed to write {path}: {e}", flush=True)
 
 
 # ── Bundled assets (themes + skills) ─────────────────────────────────────────
@@ -369,7 +402,7 @@ def _has_xai_oauth_tokens() -> bool:
         data = json.loads(auth_path.read_text())
         tokens = data.get("providers", {}).get("xai-oauth", {}).get("tokens", {})
         return bool(isinstance(tokens, dict) and tokens.get("refresh_token"))
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         return False
 
 
@@ -380,7 +413,7 @@ def _save_xai_auth_json(tokens: dict) -> None:
     if auth_path.exists():
         try:
             existing = json.loads(auth_path.read_text())
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             pass
     if not isinstance(existing, dict):
         existing = {}
@@ -630,7 +663,6 @@ def unmask(new: dict[str, str], existing: dict[str, str]) -> dict[str, str]:
 #
 # The SECRET is regenerated on every process start. That means any ADMIN_PASSWORD
 # change via Railway → redeploy → all existing cookies invalidate → users re-login.
-import hashlib as _hashlib
 import hmac as _hmac
 from urllib.parse import quote as _url_quote, urlparse as _urlparse
 
@@ -638,23 +670,63 @@ COOKIE_NAME = "hermes_auth"
 COOKIE_MAX_AGE = 7 * 86400  # 7 days
 COOKIE_SECRET = secrets.token_bytes(32)
 
+# Fix #6: Set Secure flag on cookies when running behind HTTPS (Railway, etc.).
+# Only skip when explicitly disabled (e.g. local dev over plain HTTP).
+_COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "").lower() not in ("0", "false", "no")
+
 # Public paths — no auth required. Everything else is behind the cookie gate.
 PUBLIC_PATHS = {"/health", "/login", "/logout"}
 
 
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+# Simple in-memory IP rate limiter for login attempts.
+_login_attempts: dict[str, list[float]] = {}
+_RATE_LIMIT_MAX = 5       # max attempts per window
+_RATE_LIMIT_WINDOW = 60   # seconds
+
+
+def _is_rate_limited(ip: str) -> bool:
+    """Return True if *ip* has exceeded the login rate limit."""
+    now = time.time()
+    attempts = _login_attempts.setdefault(ip, [])
+    # Prune old entries outside the window.
+    attempts[:] = [t for t in attempts if now - t < _RATE_LIMIT_WINDOW]
+    if len(attempts) >= _RATE_LIMIT_MAX:
+        return True
+    attempts.append(now)
+    return False
+
+
+# Fix #7: Server-side session revocation.  Tokens include a random session_id
+# so individual sessions can be revoked on logout without affecting others.
+_revoked_sessions: set[str] = set()
+
+
 def _make_auth_token() -> str:
-    """Build a cookie value: `<expires>.<hmac-sha256>`."""
+    """Build a cookie value: `<expires>.<session_id>.<hmac-sha256>`."""
     expires = str(int(time.time()) + COOKIE_MAX_AGE)
-    sig = _hmac.new(COOKIE_SECRET, expires.encode(), _hashlib.sha256).hexdigest()
-    return f"{expires}.{sig}"
+    session_id = secrets.token_hex(16)
+    payload = f"{expires}.{session_id}"
+    sig = _hmac.new(COOKIE_SECRET, payload.encode(), hashlib.sha256).hexdigest()
+    return f"{expires}.{session_id}.{sig}"
 
 
 def _verify_auth_token(token: str) -> bool:
     try:
-        expires_s, sig = token.rsplit(".", 1)
+        parts = token.rsplit(".", 2)
+        if len(parts) == 3:
+            # New format: <expires>.<session_id>.<hmac>
+            expires_s, session_id, sig = parts
+            if session_id in _revoked_sessions:
+                return False
+        elif len(parts) == 2:
+            # Legacy format: <expires>.<hmac> (pre-fix #7)
+            expires_s, sig = parts
+        else:
+            return False
         if int(expires_s) < time.time():
             return False
-        expected = _hmac.new(COOKIE_SECRET, expires_s.encode(), _hashlib.sha256).hexdigest()
+        expected = _hmac.new(COOKIE_SECRET, ".".join(parts[:2]).encode(), hashlib.sha256).hexdigest()
         return _hmac.compare_digest(sig, expected)
     except Exception:
         return False
@@ -764,6 +836,10 @@ async def page_login(request: Request) -> Response:
 
 async def login_post(request: Request) -> Response:
     """POST /login — validate creds and set the auth cookie."""
+    # Rate-limit login attempts per IP to slow brute-force attacks.
+    client_ip = request.client.host if request.client else "unknown"
+    if _is_rate_limited(client_ip):
+        return RedirectResponse("/login?returnTo=/&error=1", status_code=302)
     form = await request.form()
     username = str(form.get("username", ""))
     password = str(form.get("password", ""))
@@ -778,6 +854,7 @@ async def login_post(request: Request) -> Response:
             _make_auth_token(),
             max_age=COOKIE_MAX_AGE,
             httponly=True,
+            secure=_COOKIE_SECURE,
             samesite="lax",
             path="/",
         )
@@ -787,6 +864,14 @@ async def login_post(request: Request) -> Response:
 
 async def logout(request: Request) -> Response:
     """GET /logout — clear cookie and bounce to login."""
+    # Fix #7: Revoke the session server-side so the token can't be reused.
+    token = request.cookies.get(COOKIE_NAME, "")
+    try:
+        parts = token.rsplit(".", 2)
+        if len(parts) == 3:
+            _revoked_sessions.add(parts[1])  # session_id
+    except Exception:
+        pass
     resp = RedirectResponse("/login", status_code=302)
     resp.delete_cookie(COOKIE_NAME, path="/")
     return resp
@@ -849,7 +934,8 @@ class Gateway:
         await self.start()
 
     async def _drain(self):
-        assert self.proc and self.proc.stdout
+        if not self.proc or not self.proc.stdout:
+            return
         async for raw in self.proc.stdout:
             line = ANSI_ESCAPE.sub("", raw.decode(errors="replace").rstrip())
             self.logs.append(line)
@@ -920,7 +1006,8 @@ class Dashboard:
 
     async def _drain(self):
         """Stream subprocess output to Railway logs (prefixed) and a ring buffer."""
-        assert self.proc and self.proc.stdout
+        if not self.proc or not self.proc.stdout:
+            return
         try:
             async for raw in self.proc.stdout:
                 line = ANSI_ESCAPE.sub("", raw.decode(errors="replace").rstrip())
@@ -1068,13 +1155,29 @@ async def api_config_reset(request: Request):
 def _pjson(path: Path) -> dict:
     try:
         return json.loads(path.read_text()) if path.exists() else {}
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         return {}
 
 
 def _wjson(path: Path, data: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    # Fix #19: Atomic write — temp file + rename prevents partial writes on crash.
+    # Fix #10: Add error handling for file writes.
+    try:
+        import tempfile
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=str(path.parent), suffix=".tmp",
+        )
+        try:
+            with os.fdopen(tmp_fd, "w") as f:
+                f.write(json.dumps(data, indent=2, ensure_ascii=False))
+            os.replace(tmp_path, str(path))
+        except Exception:
+            try: os.unlink(tmp_path)
+            except OSError: pass
+            raise
+    except Exception as e:
+        print(f"[pairing] Failed to write {path}: {e}", flush=True)
     try: os.chmod(path, 0o600)
     except OSError: pass
 
@@ -1104,6 +1207,8 @@ async def api_pairing_approve(request: Request):
     platform, code = body.get("platform",""), body.get("code","").strip()
     if not platform or not code:
         return JSONResponse({"error": "platform and code required"}, status_code=400)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', platform):
+        return JSONResponse({"error": "Invalid platform name"}, status_code=400)
     pending_path = PAIRING_DIR / f"{platform}-pending.json"
     pending = _pjson(pending_path)
     if code not in pending:
@@ -1126,6 +1231,8 @@ async def api_pairing_deny(request: Request):
     try: body = await request.json()
     except Exception: return JSONResponse({"error": "Invalid JSON"}, status_code=400)
     platform, code = body.get("platform",""), body.get("code","").strip()
+    if not re.match(r'^[a-zA-Z0-9_-]+$', platform):
+        return JSONResponse({"error": "Invalid platform name"}, status_code=400)
     p = PAIRING_DIR / f"{platform}-pending.json"
     pending = _pjson(p)
     if code in pending:
@@ -1151,6 +1258,8 @@ async def api_pairing_revoke(request: Request):
     platform, uid = body.get("platform",""), body.get("user_id","")
     if not platform or not uid:
         return JSONResponse({"error": "platform and user_id required"}, status_code=400)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', platform):
+        return JSONResponse({"error": "Invalid platform name"}, status_code=400)
     p = PAIRING_DIR / f"{platform}-approved.json"
     approved = _pjson(p)
     if uid in approved:
@@ -1314,7 +1423,7 @@ async def api_upload(request: Request) -> Response:
     original_name = upload.filename or "unnamed"
     stem = Path(original_name).stem[:64]
     suffix = Path(original_name).suffix[:16]
-    file_hash = hashlib.md5(content).hexdigest()[:8]
+    file_hash = hashlib.sha256(content).hexdigest()[:12]
     safe_name = f"{stem}_{file_hash}{suffix}"
 
     dest = UPLOAD_DIR / safe_name
@@ -1514,6 +1623,9 @@ async def lifespan(app):
 #     WS URL, so we just forward path + query verbatim.
 PROXIED_WS_PATHS = ("/api/pty", "/api/ws", "/api/events", "/api/plugins/*")
 
+# Fix #18: Close WebSocket connections idle for longer than this (seconds).
+_WS_IDLE_TIMEOUT = 300  # 5 minutes
+
 
 async def _ws_pump_client_to_upstream(
     client: WebSocket,
@@ -1525,7 +1637,7 @@ async def _ws_pump_client_to_upstream(
     """
     try:
         while True:
-            msg = await client.receive()
+            msg = await asyncio.wait_for(client.receive(), timeout=_WS_IDLE_TIMEOUT)
             if msg.get("type") == "websocket.disconnect":
                 return
             data = msg.get("bytes")
@@ -1536,6 +1648,8 @@ async def _ws_pump_client_to_upstream(
             if text is not None:
                 await upstream.send(text)
     except (WebSocketDisconnect, websockets.exceptions.ConnectionClosed):
+        return
+    except asyncio.TimeoutError:
         return
     except Exception as e:
         print(f"[ws-proxy] client→upstream error on {client.url.path}: {e!r}", flush=True)
@@ -1548,12 +1662,15 @@ async def _ws_pump_upstream_to_client(
 ) -> None:
     """Forward upstream → client until upstream closes."""
     try:
-        async for msg in upstream:
+        while True:
+            msg = await asyncio.wait_for(upstream.recv(), timeout=_WS_IDLE_TIMEOUT)
             if isinstance(msg, bytes):
                 await client.send_bytes(msg)
             else:
                 await client.send_text(msg)
     except (websockets.exceptions.ConnectionClosed, WebSocketDisconnect):
+        return
+    except asyncio.TimeoutError:
         return
     except Exception as e:
         print(f"[ws-proxy] upstream→client error on {client.url.path}: {e!r}", flush=True)

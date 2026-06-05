@@ -49,6 +49,29 @@ Scan for these before every commit:
 - [ ] Dependencies are pinned to specific versions
 - [ ] No unused dependencies that expand attack surface
 
+## Pitfalls
+
+### Unicode characters cause misleading terminal output
+
+`cat -A` and similar flags render Unicode box-drawing characters (`─`, `│`, `═`) as `M-bM-^TM-^@` escape sequences, which can make separate lines appear concatenated. This caused a false positive during a security audit — a properly formatted `.env.example` appeared broken because `cat -A` merged lines visually.
+
+**Rules:**
+- Use `read_file()` tool (not `cat`) to inspect file contents — it renders Unicode correctly
+- If you must use `cat`, avoid `cat -A` for files that may contain Unicode
+- When grep output looks suspicious (unexpected concatenation), verify with `read_file()` before reporting findings
+- Never report a finding based solely on `cat -A` or `xxd` output — always cross-check with a clean read
+
+```bash
+# BAD — Unicode breaks visual formatting
+cat -A .env.example
+
+# GOOD — read_file tool renders correctly
+# (use the read_file tool, not terminal)
+
+# GOOD — plain cat works for most files
+cat .env.example
+```
+
 ## Quick Scan Commands
 
 ```bash

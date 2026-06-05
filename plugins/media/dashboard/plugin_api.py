@@ -13,17 +13,21 @@ import hashlib
 import logging
 import mimetypes
 import os
+import sys
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 
+# Add project root to sys.path for shared config
+_project_root = str(Path(__file__).resolve().parents[3])
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+from config import MEDIA_ROOT, MAX_UPLOAD_SIZE
+
 log = logging.getLogger(__name__)
 
 router = APIRouter()
-
-MEDIA_ROOT = Path("/data/media").resolve()
-MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
 def _safe_path(rel: str) -> Path:
@@ -137,7 +141,7 @@ async def upload_file(request: Request):
     original_name = upload.filename or "unnamed"
     stem = Path(original_name).stem[:64]
     suffix = Path(original_name).suffix[:16]
-    file_hash = hashlib.md5(content).hexdigest()[:8]
+    file_hash = hashlib.sha256(content).hexdigest()[:12]
     safe_name = f"{stem}_{file_hash}{suffix}"
 
     MEDIA_ROOT.mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,9 @@
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+# Fix #20: Pin this to a specific digest for reproducible builds, e.g.:
+#   FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:<DIGEST>
+# To get the current digest, run:
+#   docker pull ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+#   docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 # Which hermes-agent revision to install. Accepts any git ref the upstream
 # repo publishes — a release tag (recommended for reproducibility) or a
@@ -63,6 +68,10 @@ COPY requirements.txt /app/requirements.txt
 RUN uv pip install --system --no-cache -r /app/requirements.txt
 
 RUN mkdir -p /data/.hermes
+
+# Fix #8: Run as non-root for security
+RUN useradd -r -s /bin/false -d /app hermes && chown -R hermes:hermes /app /data
+USER hermes
 
 COPY server.py /app/server.py
 COPY templates/ /app/templates/

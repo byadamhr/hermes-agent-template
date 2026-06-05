@@ -487,7 +487,7 @@
           src: blobUrl,
           className: "hermes-preview-iframe",
           title: file.name,
-          sandbox: "allow-same-origin allow-scripts allow-popups",
+          sandbox: "allow-scripts allow-popups",
         });
       }
       // Text-like files
