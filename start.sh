@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# Fix: ensure .git ownership matches the current container user.
+# Railway mounts /data as a persistent volume whose ownership can lag behind
+# image changes (e.g. after switching between root and hermes user). Without
+# this, git operations fail with "detected dubious ownership in repository".
+chown -R "$(id -u):$(id -g)" /data/hermes-agent-template/.git 2>/dev/null || true
+
 # Mirror dashboard-ref-only's startup: create every directory hermes expects
 # and seed a default config.yaml if the volume is empty. Without these,
 # `hermes dashboard` endpoints that hit logs/, sessions/, cron/, etc. can fail

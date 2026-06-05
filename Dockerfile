@@ -69,6 +69,13 @@ RUN uv pip install --system --no-cache -r /app/requirements.txt
 
 RUN mkdir -p /data/.hermes
 
+# Fix: suppress Git's "dubious ownership" check on /data volume.
+# Railway mounts /data as a persistent volume. Ownership of .git/ on that
+# volume can mismatch the container user across deployments (e.g. when the
+# image switches between root and a non-root user). Without this, any git
+# operation (push, pull, status) fails with "detected dubious ownership".
+RUN git config --global --add safe.directory '*'
+
 COPY server.py /app/server.py
 COPY templates/ /app/templates/
 COPY start.sh /app/start.sh
