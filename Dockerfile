@@ -73,9 +73,9 @@ RUN mkdir -p /data/.hermes
 RUN useradd -r -s /bin/false -d /app hermes && chown -R hermes:hermes /app /data
 USER hermes
 
-COPY server.py /app/server.py
-COPY templates/ /app/templates/
-COPY start.sh /app/start.sh
+COPY --chown=hermes:hermes server.py /app/server.py
+COPY --chown=hermes:hermes templates/ /app/templates/
+COPY --chown=hermes:hermes start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
 ENV HOME=/data
