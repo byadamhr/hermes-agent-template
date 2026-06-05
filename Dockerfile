@@ -27,7 +27,7 @@ ARG HERMES_REF=v2026.5.29.2
 # Node.js is required only at build time to compile the Hermes React dashboard.
 # We strip the source + apt lists afterwards to keep the image lean.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates git tini && \
+    apt-get install -y --no-install-recommends curl ca-certificates git tini gosu && \
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
@@ -67,11 +67,11 @@ RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/h
 COPY requirements.txt /app/requirements.txt
 RUN uv pip install --system --no-cache -r /app/requirements.txt
 
-RUN mkdir -p /data/.hermes
-
-# Fix #8: Run as non-root for security
-RUN useradd -r -s /bin/false -d /app hermes && chown -R hermes:hermes /app /data
-USER hermes
+# Fix #8: Run as non-root for security.
+# Railway mounts /data as a volume at runtime, overriding build-time chown.
+# So we create the hermes user here but stay root — start.sh will chown /data
+# at boot and then drop to hermes via gosu.
+RUN useradd -r -s /bin/false -d /app hermes
 
 COPY --chown=hermes:hermes server.py /app/server.py
 COPY --chown=hermes:hermes templates/ /app/templates/

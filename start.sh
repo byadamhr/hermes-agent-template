@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# Fix #8: Railway mounts /data as a volume at runtime, overriding build-time
+# ownership. Fix permissions now (running as root) before dropping privileges.
+chown -R hermes:hermes /data /app
+
 # Mirror dashboard-ref-only's startup: create every directory hermes expects
 # and seed a default config.yaml if the volume is empty. Without these,
 # `hermes dashboard` endpoints that hit logs/, sessions/, cron/, etc. can fail
@@ -36,4 +40,5 @@ fi
 # container), so removing the file unconditionally is safe.
 rm -f /data/.hermes/gateway.pid
 
-exec python /app/server.py
+# Drop from root → hermes and exec the server.
+exec gosu hermes python /app/server.py
