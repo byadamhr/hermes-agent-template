@@ -988,7 +988,7 @@ class Dashboard:
                 # --skip-build: the Dockerfile pre-builds the React dashboard
                 # into hermes_cli/web_dist/ at image time. This flag tells
                 # hermes to trust that dist and skip its npm build check,
-                # which would otherwise add ~30s to first startup (hermes >= v2026.5.16).
+                # which would otherwise add ~30s to first startup (hermes >= v2026.5.29.2).
                 "--skip-build",
                 # --tui exposes /api/pty + /api/ws + /api/events so the
                 # dashboard's embedded Chat tab works end-to-end. Requires
