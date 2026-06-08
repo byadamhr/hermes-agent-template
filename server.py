@@ -990,12 +990,6 @@ class Dashboard:
                 # hermes to trust that dist and skip its npm build check,
                 # which would otherwise add ~30s to first startup (hermes >= v2026.5.16).
                 "--skip-build",
-                # --tui exposes /api/pty + /api/ws + /api/events so the
-                # dashboard's embedded Chat tab works end-to-end. Requires
-                # hermes >= v2026.4.23 — older releases exit immediately
-                # with "unrecognized arguments: --tui". The Dockerfile
-                # pre-builds ui-tui/dist/ so PTY spawn is instant.
-                "--tui",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
@@ -1598,8 +1592,8 @@ async def lifespan(app):
 
 
 # ── WebSocket reverse proxy ──────────────────────────────────────────────────
-# The hermes dashboard exposes several WebSocket endpoints when started with
-# --tui. The browser SPA opens these and they must flow through our reverse
+# The hermes dashboard exposes several WebSocket endpoints (embedded chat is
+# always enabled as of v0.16.0). The browser SPA opens these and they must flow through our reverse
 # proxy. /api/pub is opened only by the PTY child against loopback and is
 # intentionally NOT proxied — exposing it would let an authed user spam events
 # into channels. It lives at /api/pub (not under /api/plugins/), so the plugin
