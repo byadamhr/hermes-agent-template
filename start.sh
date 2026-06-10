@@ -42,4 +42,10 @@ fi
 # container), so removing the file unconditionally is safe.
 rm -f /data/.hermes/gateway.pid
 
+# Stamp install method as "docker" so the dashboard's "Update Hermes" button
+# refuses with the pull-a-fresh-image message. The real upgrade path is
+# bumping HERMES_REF in the Dockerfile and redeploying.
+mkdir -p "$HERMES_HOME"
+echo "docker" > "$HERMES_HOME/.install_method"
+
 exec python /app/server.py
