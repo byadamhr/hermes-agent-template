@@ -48,4 +48,25 @@ rm -f /data/.hermes/gateway.pid
 mkdir -p "$HERMES_HOME"
 echo "docker" > "$HERMES_HOME/.install_method"
 
+# Auto-sync dashboard plugins from the repo into hermes's plugin directory.
+# The Dockerfile doesn't COPY plugins/ (it's dev-time code in the repo), but
+# hermes discovers dashboard plugins from ~/.hermes/plugins/<name>/dashboard/.
+# On Railway, the repo lives at /data/hermes-agent-template/ on the persistent
+# volume, so we sync plugin dashboards on every boot to pick up changes
+# without a full image rebuild.
+REPO_PLUGINS="/data/hermes-agent-template/plugins"
+HERMES_PLUGINS="$HERMES_HOME/plugins"
+if [ -d "$REPO_PLUGINS" ]; then
+  for plugin_dir in "$REPO_PLUGINS"/*/dashboard; do
+    [ -d "$plugin_dir" ] || continue
+    plugin_name="$(basename "$(dirname "$plugin_dir")")"
+    dest="$HERMES_PLUGINS/$plugin_name/dashboard"
+    mkdir -p "$dest"
+    # Nuke old dist/python to avoid stale files, then copy fresh
+    rm -rf "$dest"
+    mkdir -p "$dest"
+    cp -a "$plugin_dir/." "$dest/"
+  done
+fi
+
 exec python /app/server.py
