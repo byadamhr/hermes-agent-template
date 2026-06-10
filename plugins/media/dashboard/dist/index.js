@@ -1,28 +1,31 @@
 /**
- * Hermes Media — Dashboard Plugin
+ * Hermes Media — Dashboard Plugin (v2)
  *
- * Browse, preview, upload, and manage files stored in /data/media.
- * Plain IIFE, no build step. Uses window.__HERMES_PLUGIN_SDK__ for React
- * and design-system components.
+ * Browse, preview, upload, and manage files/folders in /data/media.
+ * Features: folder navigation, multi-select, drag-and-drop, batch ops.
+ * Plain IIFE, no build step. Uses window.__HERMES_PLUGIN_SDK__.
  */
 (function () {
   "use strict";
 
-  const SDK = window.__HERMES_PLUGIN_SDK__;
+  var SDK = window.__HERMES_PLUGIN_SDK__;
   if (!SDK) return;
 
-  const { React } = SDK;
-  const h = React.createElement;
-  const { Button } = SDK.components;
-  const { useState, useEffect, useCallback, useRef } = SDK.hooks;
+  var React = SDK.React;
+  var h = React.createElement;
+  var Button = SDK.components.Button;
+  var useState = SDK.hooks.useState;
+  var useEffect = SDK.hooks.useEffect;
+  var useCallback = SDK.hooks.useCallback;
+  var useRef = SDK.hooks.useRef;
+  var useMemo = SDK.hooks.useMemo;
 
   // -------------------------------------------------------------------
   // Constants
   // -------------------------------------------------------------------
 
-  const API = "/api/plugins/media";
+  var API = "/api/plugins/media";
 
-  /** Extensions that should never be rendered as text preview. */
   var SKIP_TEXT_PREVIEW = {
     pdf: true, doc: true, docx: true, xls: true, xlsx: true,
     zip: true, gz: true, tar: true, rar: true, "7z": true,
@@ -92,29 +95,29 @@
   }
 
   function extLabel(file) {
-    if (file.is_image) return { icon: "🖼️", label: "Image", color: "#818cf8" };
-    if (file.is_video) return { icon: "🎬", label: "Video", color: "#f472b6" };
-    if (file.is_audio) return { icon: "🎵", label: "Audio", color: "#34d399" };
+    if (file.is_image) return { icon: "\uD83D\uDDBC\uFE0F", label: "Image", color: "#818cf8" };
+    if (file.is_video) return { icon: "\uD83C\uDFAC", label: "Video", color: "#f472b6" };
+    if (file.is_audio) return { icon: "\uD83C\uDFB5", label: "Audio", color: "#34d399" };
     var ext = (file.name.split(".").pop() || "").toLowerCase();
     var map = {
-      pdf: ["📕", "PDF", "#ef4444"],
-      doc: ["📝", "DOC", "#60a5fa"], docx: ["📝", "DOC", "#60a5fa"],
-      txt: ["📄", "TEXT", "#9ca3af"],
-      zip: ["📦", "ZIP", "#fbbf24"], gz: ["📦", "GZIP", "#fbbf24"],
-      tar: ["📦", "TAR", "#fbbf24"],
+      pdf: ["\uD83D\uDCD5", "PDF", "#ef4444"],
+      doc: ["\uD83D\uDCDD", "DOC", "#60a5fa"], docx: ["\uD83D\uDCDD", "DOC", "#60a5fa"],
+      txt: ["\uD83D\uDCC4", "TEXT", "#9ca3af"],
+      zip: ["\uD83D\uDCE6", "ZIP", "#fbbf24"], gz: ["\uD83D\uDCE6", "GZIP", "#fbbf24"],
+      tar: ["\uD83D\uDCE6", "TAR", "#fbbf24"],
       json: ["{ }", "JSON", "#fbbf24"],
-      csv: ["📊", "CSV", "#34d399"],
-      md: ["📑", "MD", "#a78bfa"],
-      py: ["🐍", "PY", "#60a5fa"],
-      js: ["📜", "JS", "#fbbf24"],
-      ts: ["📜", "TS", "#3b82f6"],
-      html: ["🌐", "HTML", "#f97316"],
-      css: ["🎨", "CSS", "#818cf8"],
+      csv: ["\uD83D\uDCCA", "CSV", "#34d399"],
+      md: ["\uD83D\uDCD1", "MD", "#a78bfa"],
+      py: ["\uD83D\uDC0D", "PY", "#60a5fa"],
+      js: ["\uD83D\uDCDC", "JS", "#fbbf24"],
+      ts: ["\uD83D\uDCDC", "TS", "#3b82f6"],
+      html: ["\uD83C\uDF10", "HTML", "#f97316"],
+      css: ["\uD83C\uDFA8", "CSS", "#818cf8"],
     };
     var entry = map[ext];
     return entry
       ? { icon: entry[0], label: entry[1], color: entry[2] }
-      : { icon: "📄", label: ext.toUpperCase() || "FILE", color: "#9ca3af" };
+      : { icon: "\uD83D\uDCC4", label: ext.toUpperCase() || "FILE", color: "#9ca3af" };
   }
 
   function getExt(file) {
@@ -128,12 +131,11 @@
   function ConfirmDialog(props) {
     return h("div", { className: "hermes-media-confirm-overlay", onClick: props.onCancel },
       h("div", { className: "hermes-media-confirm-dialog", onClick: function (e) { e.stopPropagation(); } },
-        h("h3", null, "Delete file?"),
-        h("p", null, "Are you sure you want to delete ",
-          h("strong", null, props.filename), "?"),
+        h("h3", null, props.title || "Confirm"),
+        h("p", null, props.message),
         h("div", { className: "hermes-media-confirm-buttons" },
           h("button", { className: "cancel", onClick: props.onCancel }, "Cancel"),
-          h("button", { className: "confirm", onClick: props.onConfirm }, "Delete"),
+          h("button", { className: "confirm", onClick: props.onConfirm }, props.confirmLabel || "Delete"),
         ),
       ),
     );
@@ -155,7 +157,6 @@
     var setBusy = _busy[1];
     var inputRef = useRef(null);
 
-    // Auto-focus and select the name (without extension) on mount
     useEffect(function () {
       if (inputRef.current) {
         inputRef.current.focus();
@@ -189,31 +190,124 @@
 
     return h("div", { className: "hermes-media-confirm-overlay", onClick: props.onClose },
       h("div", { className: "hermes-media-confirm-dialog", onClick: function (e) { e.stopPropagation(); } },
-        h("h3", null, "Rename file"),
+        h("h3", null, props.title || "Rename"),
         h("form", { onSubmit: handleSubmit, style: { margin: "0.75rem 0" } },
           h("input", {
-            ref: inputRef,
-            type: "text",
-            value: newName,
+            ref: inputRef, type: "text", value: newName,
             onChange: function (e) { setNewName(e.target.value); },
-            className: "hermes-rename-input",
-            disabled: busy,
+            className: "hermes-rename-input", disabled: busy,
           }),
           err && h("div", { className: "hermes-rename-error" }, err),
         ),
         h("div", { className: "hermes-media-confirm-buttons" },
-          h("button", { type: "button", className: "cancel", onClick: props.onClose,
-            disabled: busy }, "Cancel"),
-          h("button", { type: "submit", className: "confirm", onClick: handleSubmit,
-            disabled: busy, style: { background: "#2563eb", borderColor: "#1d4ed8" } },
-            busy ? "Renaming…" : "Rename"),
+          h("button", { type: "button", className: "cancel", onClick: props.onClose, disabled: busy }, "Cancel"),
+          h("button", { type: "submit", className: "confirm", onClick: handleSubmit, disabled: busy,
+            style: { background: "#2563eb", borderColor: "#1d4ed8" } },
+            busy ? "Renaming\u2026" : "Rename"),
         ),
       ),
     );
   }
 
   // -------------------------------------------------------------------
-  // Auth-aware image preview (fetches with token, shows blob URL)
+  // Create folder dialog
+  // -------------------------------------------------------------------
+
+  function CreateFolderDialog(props) {
+    var _s = useState("");
+    var name = _s[0];
+    var setName = _s[1];
+    var _e = useState(null);
+    var err = _e[0];
+    var setErr = _e[1];
+    var _busy = useState(false);
+    var busy = _busy[0];
+    var setBusy = _busy[1];
+    var inputRef = useRef(null);
+
+    useEffect(function () {
+      if (inputRef.current) inputRef.current.focus();
+    }, []);
+
+    function handleSubmit(e) {
+      e.preventDefault();
+      var trimmed = name.trim();
+      if (!trimmed) return;
+      setBusy(true);
+      setErr(null);
+      SDK.fetchJSON(API + "/folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed, parent: props.parentPath || "" }),
+      }).then(function (data) {
+        setBusy(false);
+        if (data.error) { setErr(data.error); return; }
+        props.onCreated(data);
+      }).catch(function (err) {
+        setBusy(false);
+        setErr(err.message || "Failed to create folder");
+      });
+    }
+
+    return h("div", { className: "hermes-media-confirm-overlay", onClick: props.onClose },
+      h("div", { className: "hermes-media-confirm-dialog", onClick: function (e) { e.stopPropagation(); } },
+        h("h3", null, "New Folder"),
+        h("form", { onSubmit: handleSubmit, style: { margin: "0.75rem 0" } },
+          h("input", {
+            ref: inputRef, type: "text", value: name, placeholder: "Folder name",
+            onChange: function (e) { setName(e.target.value); },
+            className: "hermes-rename-input", disabled: busy,
+          }),
+          err && h("div", { className: "hermes-rename-error" }, err),
+        ),
+        h("div", { className: "hermes-media-confirm-buttons" },
+          h("button", { type: "button", className: "cancel", onClick: props.onClose, disabled: busy }, "Cancel"),
+          h("button", { type: "submit", className: "confirm", onClick: handleSubmit, disabled: busy,
+            style: { background: "#2563eb", borderColor: "#1d4ed8" } },
+            busy ? "Creating\u2026" : "Create"),
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------
+  // Breadcrumbs
+  // -------------------------------------------------------------------
+
+  function Breadcrumbs(props) {
+    var currentPath = props.currentPath;
+    var onNavigate = props.onNavigate;
+
+    var parts = currentPath ? currentPath.split("/").filter(Boolean) : [];
+
+    var items = [];
+    items.push(
+      h("span", {
+        key: "root",
+        className: "hermes-breadcrumb-item" + (parts.length === 0 ? " active" : ""),
+        onClick: function () { onNavigate(""); },
+      }, "\uD83C\uDFE0 Media")
+    );
+
+    var accumulated = "";
+    for (var i = 0; i < parts.length; i++) {
+      accumulated += (i > 0 ? "/" : "") + parts[i];
+      var isLast = i === parts.length - 1;
+      items.push(
+        h("span", { key: "sep-" + i, className: "hermes-breadcrumb-sep" }, " \u203A "),
+        h("span", {
+          key: accumulated,
+          className: "hermes-breadcrumb-item" + (isLast ? " active" : ""),
+          onClick: isLast ? undefined : function (p) { return function () { onNavigate(p); }; }(accumulated),
+        }, parts[i])
+      );
+    }
+
+    return h("div", { className: "hermes-breadcrumbs" }, items);
+  }
+
+  // -------------------------------------------------------------------
+  // Auth-aware image preview
   // -------------------------------------------------------------------
 
   function FilePreview(props) {
@@ -229,7 +323,7 @@
       fetchBlobUrl(fileUrl).then(function (u) {
         urlRef.current = u;
         setBlobUrl(u);
-      }).catch(function () { /* silent — show placeholder */ });
+      }).catch(function () { });
       return function () {
         if (urlRef.current) {
           URL.revokeObjectURL(urlRef.current);
@@ -247,7 +341,7 @@
       return h("div", { className: "hermes-media-preview" },
         h("div", { className: "hermes-media-preview-icon" },
           h("div", { className: "hermes-media-spinner" }),
-          h("span", null, "Loading…"),
+          h("span", null, "Loading\u2026"),
         ),
       );
     }
@@ -259,13 +353,13 @@
           h("video", { src: blobUrl, preload: "metadata", controls: false },
             h("track", { kind: "captions" }),
           ),
-          h("div", { className: "hermes-media-play-overlay" }, "▶"),
+          h("div", { className: "hermes-media-play-overlay"}, "\u25B6"),
         );
       }
       return h("div", { className: "hermes-media-preview" },
         h("div", { className: "hermes-media-preview-icon" },
           h("div", { className: "hermes-media-spinner" }),
-          h("span", null, "Loading…"),
+          h("span", null, "Loading\u2026"),
         ),
       );
     }
@@ -273,13 +367,12 @@
     if (file.is_audio) {
       return h("div", { className: "hermes-media-preview audio-preview", onClick: onClick },
         h("div", { className: "hermes-media-preview-icon" },
-          h("span", { style: { fontSize: "2.5rem" } }, "🎵"),
+          h("span", { style: { fontSize: "2.5rem" } }, "\uD83C\uDFB5"),
           h("span", null, "Audio"),
         ),
       );
     }
 
-    // Generic file
     var ft = extLabel(file);
     return h("div", { className: "hermes-media-preview clickable", onClick: onClick,
       style: { background: "color-mix(in srgb, " + ft.color + " 8%, var(--color-muted, #111827))" } },
@@ -287,6 +380,100 @@
         h("span", { style: { fontSize: "2.5rem", color: ft.color } }, ft.icon),
         h("span", { style: { color: ft.color } }, ft.label),
       ),
+    );
+  }
+
+  // -------------------------------------------------------------------
+  // Folder card
+  // -------------------------------------------------------------------
+
+  function FolderCard(props) {
+    var folder = props.folder;
+    var onOpen = props.onOpen;
+    var onDelete = props.onDelete;
+    var onRename = props.onRename;
+    var onDropFile = props.onDropFile;
+    var selected = props.selected;
+    var onSelect = props.onSelect;
+    var _showRename = useState(false);
+    var showRename = _showRename[0];
+    var setShowRename = _showRename[1];
+    var _showConfirm = useState(false);
+    var showConfirm = _showConfirm[0];
+    var setShowConfirm = _showConfirm[1];
+    var _dragOver = useState(false);
+    var dragOver = _dragOver[0];
+    var setDragOver = _dragOver[1];
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOver(true);
+    }
+    function handleDragLeave(e) {
+      e.preventDefault();
+      setDragOver(false);
+    }
+    function handleDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragOver(false);
+      var filePath = e.dataTransfer.getData("text/file-path");
+      if (filePath && onDropFile) {
+        onDropFile(filePath, folder.path);
+      }
+    }
+
+    var totalItems = (folder.file_count || 0) + (folder.folder_count || 0);
+
+    return h("div", {
+      className: "hermes-media-folder-card" + (dragOver ? " drag-over" : "") + (selected ? " selected" : ""),
+      onDragOver: handleDragOver,
+      onDragLeave: handleDragLeave,
+      onDrop: handleDrop,
+    },
+      // Select checkbox
+      h("div", { className: "hermes-media-folder-checkbox", onClick: function (e) { e.stopPropagation(); onSelect(folder); } },
+        h("div", { className: "hermes-checkbox" + (selected ? " checked" : "") },
+          selected && "\u2713"
+        ),
+      ),
+      // Delete button
+      h("button", {
+        className: "hermes-media-card-delete",
+        onClick: function (e) { e.stopPropagation(); setShowConfirm(true); },
+        title: "Delete folder",
+      }, "\u2715"),
+      // Folder icon + info
+      h("div", { className: "hermes-media-folder-body", onClick: function () { onOpen(folder.path); } },
+        h("div", { className: "hermes-media-folder-icon" }, "\uD83D\uDCC1"),
+        h("p", { className: "hermes-media-filename", title: folder.name }, folder.name),
+        h("div", { className: "hermes-media-meta" },
+          h("span", null, totalItems + " item" + (totalItems !== 1 ? "s" : "")),
+        ),
+      ),
+      // Actions
+      h("div", { className: "hermes-media-actions" },
+        h("button", { onClick: function (e) { e.stopPropagation(); onOpen(folder.path); } }, "\uD83D\uDCC2 Open"),
+        h("button", { onClick: function (e) { e.stopPropagation(); setShowRename(true); } }, "\u270F Rename"),
+      ),
+      showConfirm && h(ConfirmDialog, {
+        title: "Delete folder?",
+        message: "Delete \"" + folder.name + "\" and all its contents?",
+        confirmLabel: "Delete",
+        onConfirm: function () { setShowConfirm(false); onDelete(folder.path); },
+        onCancel: function () { setShowConfirm(false); },
+      }),
+      showRename && h(RenameDialog, {
+        title: "Rename folder",
+        currentName: folder.name,
+        path: folder.path,
+        onClose: function () { setShowRename(false); },
+        onRenamed: function (newPath, newName) {
+          setShowRename(false);
+          onRename(folder.path, newPath, newName);
+        },
+      }),
     );
   }
 
@@ -299,21 +486,26 @@
     var onDelete = props.onDelete;
     var onPreview = props.onPreview;
     var onRename = props.onRename;
-    var _s = useState(false);
-    var showConfirm = _s[0];
-    var setShowConfirm = _s[1];
-    var _r = useState(false);
-    var showRename = _r[0];
-    var setShowRename = _r[1];
+    var selected = props.selected;
+    var onSelect = props.onSelect;
+    var _showConfirm = useState(false);
+    var showConfirm = _showConfirm[0];
+    var setShowConfirm = _showConfirm[1];
+    var _showRename = useState(false);
+    var showRename = _showRename[0];
+    var setShowRename = _showRename[1];
     var ft = extLabel(file);
+
+    function handleDragStart(e) {
+      e.dataTransfer.setData("text/file-path", file.path);
+      e.dataTransfer.effectAllowed = "move";
+    }
 
     function handleDownload(e) {
       e.preventDefault();
       e.stopPropagation();
       var url = API + "/file/" + encodeURIComponent(file.path);
-      authFetch(url).then(function (res) {
-        return res.blob();
-      }).then(function (blob) {
+      authFetch(url).then(function (res) { return res.blob(); }).then(function (blob) {
         var a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = file.name;
@@ -324,31 +516,41 @@
       });
     }
 
-    return h("div", { className: "hermes-media-card" },
-      // Floating delete button — top-right corner
+    return h("div", {
+      className: "hermes-media-card" + (selected ? " selected" : ""),
+      draggable: "true",
+      onDragStart: handleDragStart,
+    },
+      // Select checkbox
+      h("div", { className: "hermes-media-card-checkbox", onClick: function (e) { e.stopPropagation(); onSelect(file); } },
+        h("div", { className: "hermes-checkbox" + (selected ? " checked" : "") },
+          selected && "\u2713"
+        ),
+      ),
+      // Floating delete button
       h("button", {
         className: "hermes-media-card-delete",
         onClick: function (e) { e.stopPropagation(); setShowConfirm(true); },
         title: "Delete",
-      }, "✕"),
+      }, "\u2715"),
       h(FilePreview, { file: file, onClick: function () { onPreview(file); } }),
       h("div", { className: "hermes-media-info", onClick: function () { onPreview(file); } },
         h("p", { className: "hermes-media-filename", title: file.name }, file.name),
         h("div", { className: "hermes-media-meta" },
           h("span", { style: { color: ft.color } }, ft.icon),
           h("span", null, formatSize(file.size)),
-          h("span", null, "·"),
+          h("span", null, "\u00B7"),
           h("span", null, formatTime(file.mtime)),
         ),
       ),
       h("div", { className: "hermes-media-actions" },
-        h("button", { onClick: handleDownload }, "⬇ Download"),
-        h("button", { onClick: function (e) {
-          e.stopPropagation(); setShowRename(true);
-        } }, "✏ Rename"),
+        h("button", { onClick: handleDownload }, "\u2B07 Download"),
+        h("button", { onClick: function (e) { e.stopPropagation(); setShowRename(true); } }, "\u270F Rename"),
       ),
       showConfirm && h(ConfirmDialog, {
-        filename: file.name,
+        title: "Delete file?",
+        message: "Are you sure you want to delete \"" + file.name + "\"?",
+        confirmLabel: "Delete",
         onConfirm: function () { setShowConfirm(false); onDelete(file.path); },
         onCancel: function () { setShowConfirm(false); },
       }),
@@ -388,36 +590,16 @@
 
     useEffect(function () {
       var fileUrl = API + "/file/" + encodeURIComponent(file.path);
-      if (file.is_image || file.is_video || file.is_audio) {
+      if (file.is_image || file.is_video || file.is_audio || isPdf || isHtml) {
         fetchBlobUrl(fileUrl).then(function (u) {
           urlRef.current = u;
           setBlobUrl(u);
-        }).catch(function () {
-          setLoadError(true);
-        });
-      } else if (isPdf) {
-        // PDFs: fetch as blob → object URL → embed in iframe
-        fetchBlobUrl(fileUrl).then(function (u) {
-          urlRef.current = u;
-          setBlobUrl(u);
-        }).catch(function () {
-          setLoadError(true);
-        });
-      } else if (isHtml) {
-        // HTML: fetch as blob → object URL → render in iframe
-        fetchBlobUrl(fileUrl).then(function (u) {
-          urlRef.current = u;
-          setBlobUrl(u);
-        }).catch(function () {
-          setLoadError(true);
-        });
+        }).catch(function () { setLoadError(true); });
       } else if (!SKIP_TEXT_PREVIEW[ext]) {
-        // Text-like files: fetch content via text endpoint
         SDK.fetchJSON(API + "/text/" + encodeURIComponent(file.path))
           .then(function (data) { setContent(data.content); })
           .catch(function () { setContent(null); setLoadError(true); });
       } else {
-        // Binary files we can't preview (zip, doc, etc.)
         setLoadError(true);
       }
       return function () {
@@ -428,7 +610,6 @@
       };
     }, [file.path]);
 
-    // ESC to close
     useEffect(function () {
       function onKey(e) { if (e.key === "Escape") onClose(); }
       document.addEventListener("keydown", onKey);
@@ -439,103 +620,54 @@
 
     function handleDownload() {
       var url = API + "/file/" + encodeURIComponent(file.path);
-      authFetch(url).then(function (res) { return res.blob(); })
-        .then(function (blob) {
-          var a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = file.name;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(a.href);
-        });
+      authFetch(url).then(function (res) { return res.blob(); }).then(function (blob) {
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+      });
     }
 
     function renderContent() {
-      // Images
-      if (file.is_image && blobUrl) {
-        return h("img", { src: blobUrl, alt: file.name, className: "hermes-preview-img" });
-      }
-      // Videos
-      if (file.is_video && blobUrl) {
-        return h("video", {
-          src: blobUrl, controls: true, autoPlay: true,
-          className: "hermes-preview-video",
-        }, h("track", { kind: "captions" }));
-      }
-      // Audio
-      if (file.is_audio && blobUrl) {
-        return h("div", { className: "hermes-preview-audio-wrap" },
-          h("div", { style: { fontSize: "4rem", marginBottom: "1rem" } }, "🎵"),
-          h("audio", { src: blobUrl, controls: true, autoPlay: true, style: { width: "100%" } }),
-        );
-      }
-      // PDF — render in iframe
-      if (isPdf && blobUrl) {
-        return h("iframe", {
-          src: blobUrl,
-          className: "hermes-preview-iframe",
-          title: file.name,
-        });
-      }
-      // HTML — render in iframe (shows actual page, not source).
-      // User-uploaded HTML often contains JS that fetches data and
-      // populates the page dynamically, so we must allow scripts.
-      // allow-same-origin lets blob: resolve relative paths.
-      if (isHtml && blobUrl) {
-        return h("iframe", {
-          src: blobUrl,
-          className: "hermes-preview-iframe",
-          title: file.name,
-          sandbox: "allow-scripts allow-popups",
-        });
-      }
-      // Text-like files
-      if (content !== null) {
-        return h("pre", { className: "hermes-preview-text" }, content);
-      }
-      // Non-previewable binary or error
-      if (loadError) {
-        return h("div", { className: "hermes-preview-not-previewable" },
-          h("div", { style: { fontSize: "3rem", marginBottom: "0.75rem" } }, ft.icon),
-          h("p", { style: { fontWeight: 500, fontSize: "1rem", margin: "0 0 0.25rem" } },
-            "Preview not available"),
-          h("p", { style: { fontSize: "0.85rem", color: "var(--color-muted-foreground, #9ca3af)",
-            margin: "0 0 1rem" } },
-            ext.toUpperCase() + " files cannot be displayed in the browser."),
-          h("button", { className: "hermes-preview-btn", onClick: handleDownload,
-            style: { padding: "0.5rem 1.5rem" } }, "⬇ Download to view"),
-        );
-      }
-      // Still loading
-      return h("div", { className: "hermes-preview-loading" },
-        h("div", { className: "hermes-media-spinner" }),
-        h("span", null, "Loading…"),
+      if (file.is_image && blobUrl) return h("img", { src: blobUrl, alt: file.name, className: "hermes-preview-img" });
+      if (file.is_video && blobUrl) return h("video", { src: blobUrl, controls: true, autoPlay: true, className: "hermes-preview-video" }, h("track", { kind: "captions" }));
+      if (file.is_audio && blobUrl) return h("div", { className: "hermes-preview-audio-wrap" },
+        h("div", { style: { fontSize: "4rem", marginBottom: "1rem" } }, "\uD83C\uDFB5"),
+        h("audio", { src: blobUrl, controls: true, autoPlay: true, style: { width: "100%" } }),
       );
+      if (isPdf && blobUrl) return h("iframe", { src: blobUrl, className: "hermes-preview-iframe", title: file.name });
+      if (isHtml && blobUrl) return h("iframe", { src: blobUrl, className: "hermes-preview-iframe", title: file.name, sandbox: "allow-scripts allow-popups" });
+      if (content !== null) return h("pre", { className: "hermes-preview-text" }, content);
+      if (loadError) return h("div", { className: "hermes-preview-not-previewable" },
+        h("div", { style: { fontSize: "3rem", marginBottom: "0.75rem" } }, ft.icon),
+        h("p", { style: { fontWeight: 500, fontSize: "1rem", margin: "0 0 0.25rem" } }, "Preview not available"),
+        h("p", { style: { fontSize: "0.85rem", color: "var(--color-muted-foreground, #9ca3af)", margin: "0 0 1rem" } },
+          ext.toUpperCase() + " files cannot be displayed in the browser."),
+        h("button", { className: "hermes-preview-btn", onClick: handleDownload, style: { padding: "0.5rem 1.5rem" } }, "\u2B07 Download to view"),
+      );
+      return h("div", { className: "hermes-preview-loading" }, h("div", { className: "hermes-media-spinner" }), h("span", null, "Loading\u2026"));
     }
 
     return h("div", { className: "hermes-media-preview-overlay", onClick: onClose },
       h("div", { className: "hermes-preview-modal", onClick: function (e) { e.stopPropagation(); } },
-        // Header
         h("div", { className: "hermes-preview-header" },
           h("div", { className: "hermes-preview-title" },
             h("span", { style: { color: ft.color, marginRight: "0.5rem" } }, ft.icon),
             h("span", null, file.name),
-            h("span", { className: "hermes-media-count",
-              style: { marginLeft: "0.5rem" } }, formatSize(file.size)),
+            h("span", { className: "hermes-media-count", style: { marginLeft: "0.5rem" } }, formatSize(file.size)),
           ),
           h("div", { className: "hermes-preview-header-actions" },
-            h("button", { className: "hermes-preview-btn", onClick: handleDownload },
-              "⬇ Download"),
-            h("button", { className: "hermes-preview-close", onClick: onClose }, "✕"),
+            h("button", { className: "hermes-preview-btn", onClick: handleDownload }, "\u2B07 Download"),
+            h("button", { className: "hermes-preview-close", onClick: onClose }, "\u2715"),
           ),
         ),
-        // Content
         h("div", { className: "hermes-preview-body" }, renderContent()),
-        // Footer
         h("div", { className: "hermes-preview-footer" },
           h("span", null, file.mime_type),
-          h("span", null, "·"),
+          h("span", null, "\u00B7"),
           h("span", null, "Modified " + formatTime(file.mtime)),
         ),
       ),
@@ -548,6 +680,7 @@
 
   function UploadZone(props) {
     var onUploaded = props.onUploaded;
+    var currentPath = props.currentPath;
     var _s1 = useState(false);
     var dragging = _s1[0];
     var setDragging = _s1[1];
@@ -564,7 +697,6 @@
     var uploadTotal = _s5[0];
     var setUploadTotal = _s5[1];
     var _s6 = useState(null);
-    // success: { path, name, size, count } or null
     var success = _s6[0];
     var setSuccess = _s6[1];
     var _s7 = useState(false);
@@ -575,6 +707,7 @@
     function uploadOne(file) {
       var fd = new FormData();
       fd.append("file", file);
+      if (currentPath) fd.append("folder", currentPath);
       return authFetch(API + "/upload", { method: "POST", body: fd })
         .then(function (res) { return res.json(); })
         .then(function (data) {
@@ -593,9 +726,6 @@
       setCopied(false);
       setUploadProgress(0);
       setUploadTotal(arr.length);
-
-      // Upload sequentially so the server isn't slammed and we can
-      // report progress accurately.
       var chain = Promise.resolve();
       var firstError = null;
       var lastResult = null;
@@ -617,22 +747,11 @@
         setUploadTotal(0);
         if (firstError) {
           setError(firstError);
-          // If some succeeded too, still show partial success
           if (lastResult && uploadedCount > 0) {
-            setSuccess({
-              path: lastResult.path,
-              name: lastResult.name,
-              size: lastResult.size,
-              count: uploadedCount,
-            });
+            setSuccess({ path: lastResult.path, name: lastResult.name, size: lastResult.size, count: uploadedCount });
           }
         } else if (lastResult) {
-          setSuccess({
-            path: lastResult.path,
-            name: lastResult.name,
-            size: lastResult.size,
-            count: uploadedCount,
-          });
+          setSuccess({ path: lastResult.path, name: lastResult.name, size: lastResult.size, count: uploadedCount });
         }
         onUploaded();
       });
@@ -644,63 +763,30 @@
       setDragging(false);
       handleFiles(e.dataTransfer.files);
     }
-
-    function onDragOver(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      setDragging(true);
-    }
-
-    function onDragLeave(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      setDragging(false);
-    }
+    function onDragOver(e) { e.preventDefault(); e.stopPropagation(); setDragging(true); }
+    function onDragLeave(e) { e.preventDefault(); e.stopPropagation(); setDragging(false); }
 
     function copyPath() {
       if (!success || !success.path) return;
       navigator.clipboard.writeText(success.path).then(function () {
         setCopied(true);
         setTimeout(function () { setCopied(false); }, 2000);
-      }).catch(function () {
-        // Fallback: select the text
-        var el = document.querySelector(".hermes-media-upload-success-path code");
-        if (el) {
-          var range = document.createRange();
-          range.selectNodeContents(el);
-          var sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(range);
-        }
-      });
+      }).catch(function () { });
     }
 
     var statusText = uploading
-      ? (uploadTotal > 1
-          ? "Uploading " + uploadProgress + " / " + uploadTotal + "…"
-          : "Uploading…")
+      ? (uploadTotal > 1 ? "Uploading " + uploadProgress + " / " + uploadTotal + "\u2026" : "Uploading\u2026")
       : null;
-
-    var successLabel = success && success.count > 1
-      ? success.count + " files uploaded"
-      : "File saved";
-
-    var hintCommand = success && success.path
-      ? "read " + success.path
-      : "";
+    var successLabel = success && success.count > 1 ? success.count + " files uploaded" : "File saved";
 
     return h("div", { className: "hermes-media-upload" },
       h("div", {
         className: "hermes-media-dropzone" + (dragging ? " dragging" : ""),
-        onDrop: onDrop,
-        onDragOver: onDragOver,
-        onDragLeave: onDragLeave,
+        onDrop: onDrop, onDragOver: onDragOver, onDragLeave: onDragLeave,
         onClick: function () { if (!uploading && fileRef.current) fileRef.current.click(); },
       },
         h("input", {
-          ref: fileRef,
-          type: "file",
-          multiple: true,
+          ref: fileRef, type: "file", multiple: true,
           style: { display: "none" },
           onChange: function () {
             if (fileRef.current && fileRef.current.files.length) {
@@ -715,27 +801,21 @@
               h("span", null, statusText),
             )
           : h("div", { className: "hermes-media-upload-content" },
-              h("span", { style: { fontSize: "2rem" } }, "⬆"),
+              h("span", { style: { fontSize: "2rem" } }, "\u2B06"),
               h("span", null, "Drop files here or click to upload"),
-              h("span", { className: "hermes-media-upload-hint" }, "Multiple files supported · Max 50 MB each"),
+              h("span", { className: "hermes-media-upload-hint" }, "Multiple files supported \u00B7 Max 50 MB each"),
             ),
       ),
       error && h("div", { className: "hermes-media-upload-error" }, error),
-      // Upload success confirmation
       success && !uploading && h("div", { className: "heres-media-upload-success" },
-        h("div", { className: "hermes-media-upload-success-label" },
-          "✅ ", successLabel,
-        ),
-        h("div", { className: "hermes-media-upload-success-path" },
-          h("code", null, success.path),
-        ),
+        h("div", { className: "hermes-media-upload-success-label" }, "\u2705 ", successLabel),
+        h("div", { className: "hermes-media-upload-success-path" }, h("code", null, success.path)),
         h("button", {
           className: "hermes-media-copy-btn" + (copied ? " copied" : ""),
           onClick: copyPath,
-        }, copied ? "✅ Copied!" : "📋 Copy path to clipboard"),
+        }, copied ? "\u2705 Copied!" : "\uD83D\uDCCB Copy path to clipboard"),
         h("div", { className: "hermes-media-upload-success-hint" },
-          "Paste in chat: ",
-          h("code", null, hintCommand),
+          "Paste in chat: ", h("code", null, "read " + success.path),
         ),
         h("button", {
           className: "hermes-media-upload-success-dismiss",
@@ -746,98 +826,285 @@
   }
 
   // -------------------------------------------------------------------
+  // Batch action toolbar
+  // -------------------------------------------------------------------
+
+  function BatchToolbar(props) {
+    var selectedCount = props.selectedCount;
+    var onDelete = props.onDelete;
+    var onMove = props.onMove;
+    var onClear = props.onClear;
+    var folders = props.folders;
+
+    if (selectedCount === 0) return null;
+
+    return h("div", { className: "hermes-media-batch-toolbar" },
+      h("span", { className: "hermes-media-batch-count" }, selectedCount + " selected"),
+      h("button", { className: "hermes-batch-btn danger", onClick: onDelete }, "\u2715 Delete"),
+      folders.length > 0 && h("button", { className: "hermes-batch-btn", onClick: onMove }, "\u2191 Move to\u2026"),
+      h("button", { className: "hermes-batch-btn", onClick: onClear }, "Clear"),
+    );
+  }
+
+  // -------------------------------------------------------------------
+  // Move dialog
+  // -------------------------------------------------------------------
+
+  function MoveDialog(props) {
+    var folders = props.folders;
+    var onMove = props.onMove;
+    var onClose = props.onClose;
+    var _sel = useState(null);
+    var selectedFolder = _sel[0];
+    var setSelectedFolder = _sel[1];
+
+    function handleMove() {
+      onMove(selectedFolder); // null = root
+    }
+
+    return h("div", { className: "hermes-media-confirm-overlay", onClick: onClose },
+      h("div", { className: "hermes-media-confirm-dialog hermes-move-dialog", onClick: function (e) { e.stopPropagation(); } },
+        h("h3", null, "Move to folder"),
+        h("div", { className: "hermes-move-list" },
+          h("div", {
+            className: "hermes-move-item" + (selectedFolder === null ? " active" : ""),
+            onClick: function () { setSelectedFolder(null); },
+          }, "\uD83C\uDFE0 Media (root)"),
+          folders.map(function (f) {
+            return h("div", {
+              key: f.path,
+              className: "hermes-move-item" + (selectedFolder === f.path ? " active" : ""),
+              onClick: function () { setSelectedFolder(f.path); },
+            }, "\uD83D\uDCC1 " + f.name);
+          }),
+        ),
+        h("div", { className: "hermes-media-confirm-buttons" },
+          h("button", { className: "cancel", onClick: onClose }, "Cancel"),
+          h("button", { className: "confirm", onClick: handleMove,
+            style: { background: "#2563eb", borderColor: "#1d4ed8" } }, "Move"),
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------
   // Main component
   // -------------------------------------------------------------------
 
   function MediaPlugin() {
-    var _s1 = useState([]);
-    var files = _s1[0];
-    var setFiles = _s1[1];
-    var _s2 = useState(true);
-    var loading = _s2[0];
-    var setLoading = _s2[1];
-    var _s3 = useState(null);
-    var error = _s3[0];
-    var setError = _s3[1];
-    var _s4 = useState(null);
-    var previewFile = _s4[0];
-    var setPreviewFile = _s4[1];
+    // Data
+    var _files = useState([]);
+    var files = _files[0];
+    var setFiles = _files[1];
+    var _folders = useState([]);
+    var folders = _folders[0];
+    var setFolders = _folders[1];
+    var _loading = useState(true);
+    var loading = _loading[0];
+    var setLoading = _loading[1];
+    var _error = useState(null);
+    var error = _error[0];
+    var setError = _error[1];
+    var _previewFile = useState(null);
+    var previewFile = _previewFile[0];
+    var setPreviewFile = _previewFile[1];
 
-    var fetchFiles = useCallback(function () {
+    // Navigation
+    var _currentPath = useState("");
+    var currentPath = _currentPath[0];
+    var setCurrentPath = _currentPath[1];
+
+    // Selection
+    var _selected = useState({});
+    var selected = _selected[0];
+    var setSelected = _selected[1];
+
+    // Dialogs
+    var _showCreateFolder = useState(false);
+    var showCreateFolder = _showCreateFolder[0];
+    var setShowCreateFolder = _showCreateFolder[1];
+    var _showMoveDialog = useState(false);
+    var showMoveDialog = _showMoveDialog[0];
+    var setShowMoveDialog = _showMoveDialog[1];
+    var _showBatchDelete = useState(false);
+    var showBatchDelete = _showBatchDelete[0];
+    var setShowBatchDelete = _showBatchDelete[1];
+
+    // Fetch files/folders for current path
+    var fetchContent = useCallback(function () {
       setLoading(true);
       setError(null);
-      SDK.fetchJSON(API + "/files")
+      var url = API + "/files" + (currentPath ? "?path=" + encodeURIComponent(currentPath) : "");
+      SDK.fetchJSON(url)
         .then(function (data) {
-          setFiles(data);
+          setFiles(data.files || []);
+          setFolders(data.folders || []);
           setLoading(false);
         })
         .catch(function (err) {
           setError(err.message || "Failed to load files");
           setLoading(false);
         });
-    }, []);
+    }, [currentPath]);
 
     useEffect(function () {
-      fetchFiles();
-    }, [fetchFiles]);
+      fetchContent();
+      setSelected({});
+    }, [fetchContent]);
 
-    var handleDelete = useCallback(function (path) {
-      SDK.fetchJSON(API + "/file/" + encodeURIComponent(path), { method: "DELETE" })
-        .then(function () {
-          setFiles(function (prev) {
-            return prev.filter(function (f) { return f.path !== path; });
-          });
-        })
-        .catch(function (err) {
-          alert("Delete failed: " + (err.message || "Unknown error"));
-        });
+    // Navigate into folder
+    var navigateTo = useCallback(function (path) {
+      setCurrentPath(path);
     }, []);
 
+    // File operations
+    var handleDelete = useCallback(function (path) {
+      SDK.fetchJSON(API + "/file/" + encodeURIComponent(path), { method: "DELETE" })
+        .then(function () { fetchContent(); })
+        .catch(function (err) { alert("Delete failed: " + (err.message || "Unknown error")); });
+    }, [fetchContent]);
+
     var handleRename = useCallback(function (oldPath, newPath, newName) {
-      setFiles(function (prev) {
-        return prev.map(function (f) {
-          if (f.path === oldPath) {
-            return Object.assign({}, f, { path: newPath, name: newName });
-          }
-          return f;
-        });
+      fetchContent();
+    }, [fetchContent]);
+
+    // Folder operations
+    var handleDeleteFolder = useCallback(function (path) {
+      SDK.fetchJSON(API + "/folder/" + encodeURIComponent(path), { method: "DELETE" })
+        .then(function () { fetchContent(); })
+        .catch(function (err) { alert("Delete failed: " + (err.message || "Unknown error")); });
+    }, [fetchContent]);
+
+    var handleRenameFolder = useCallback(function (oldPath, newPath, newName) {
+      fetchContent();
+    }, [fetchContent]);
+
+    var handleCreateFolder = useCallback(function () {
+      setShowCreateFolder(false);
+      fetchContent();
+    }, [fetchContent]);
+
+    // Selection
+    var toggleSelect = useCallback(function (item) {
+      setSelected(function (prev) {
+        var next = Object.assign({}, prev);
+        if (next[item.path]) {
+          delete next[item.path];
+        } else {
+          next[item.path] = item;
+        }
+        return next;
       });
     }, []);
 
-    var isEmpty = files.length === 0;
+    var clearSelection = useCallback(function () { setSelected({}); }, []);
+
+    var selectedCount = Object.keys(selected).length;
+
+    // Batch delete
+    var handleBatchDelete = useCallback(function () {
+      var paths = Object.keys(selected);
+      var chain = Promise.resolve();
+      paths.forEach(function (p) {
+        chain = chain.then(function () {
+          return SDK.fetchJSON(API + "/file/" + encodeURIComponent(p), { method: "DELETE" });
+        });
+      });
+      chain.then(function () {
+        setShowBatchDelete(false);
+        setSelected({});
+        fetchContent();
+      }).catch(function (err) {
+        alert("Batch delete failed: " + (err.message));
+      });
+    }, [selected, fetchContent]);
+
+    // Batch move
+    var handleBatchMove = useCallback(function (destFolder) {
+      var paths = Object.keys(selected);
+      SDK.fetchJSON(API + "/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths: paths, dest: destFolder || "" }),
+      }).then(function (data) {
+        setShowMoveDialog(false);
+        setSelected({});
+        fetchContent();
+      }).catch(function (err) {
+        alert("Move failed: " + (err.message));
+      });
+    }, [selected, fetchContent]);
+
+    // Drag-and-drop: move single file to folder
+    var handleDropFile = useCallback(function (filePath, destFolder) {
+      SDK.fetchJSON(API + "/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths: [filePath], dest: destFolder }),
+      }).then(function () {
+        fetchContent();
+      }).catch(function (err) {
+        alert("Move failed: " + (err.message));
+      });
+    }, [fetchContent]);
+
+    var isEmpty = files.length === 0 && folders.length === 0;
 
     return h("div", { className: "hermes-media" },
       // Header
       h("div", { className: "hermes-media-header" },
         h("div", { className: "hermes-media-header-left" },
           h("h2", null, "Media Files"),
-          !isEmpty && h("span", { className: "hermes-media-count" }, files.length),
+          !isEmpty && h("span", { className: "hermes-media-count" }, (files.length + folders.length)),
         ),
-        h(Button, {
-          onClick: fetchFiles,
-          variant: "outline",
-          size: "sm",
-        }, "↻ Refresh"),
+        h("div", { className: "hermes-media-header-actions" },
+          h(Button, { onClick: function () { setShowCreateFolder(true); }, variant: "outline", size: "sm" }, "\uD83D\uDCC1 New Folder"),
+          h(Button, { onClick: fetchContent, variant: "outline", size: "sm" }, "\u21BB Refresh"),
+        ),
       ),
 
+      // Breadcrumbs
+      h(Breadcrumbs, { currentPath: currentPath, onNavigate: navigateTo }),
+
       // Upload zone
-      h(UploadZone, { onUploaded: fetchFiles }),
+      h(UploadZone, { onUploaded: fetchContent, currentPath: currentPath }),
+
+      // Batch toolbar
+      h(BatchToolbar, {
+        selectedCount: selectedCount,
+        folders: folders,
+        onDelete: function () { setShowBatchDelete(true); },
+        onMove: function () { setShowMoveDialog(true); },
+        onClear: clearSelection,
+      }),
 
       // Error
       error && files.length === 0 && h("div", { className: "hermes-media-error" },
         error,
         h("div", { style: { marginTop: "0.75rem" } },
-          h(Button, { onClick: fetchFiles, variant: "outline", size: "sm" }, "Retry"),
+          h(Button, { onClick: fetchContent, variant: "outline", size: "sm" }, "Retry"),
         ),
       ),
 
       // Loading
-      loading && files.length === 0 && h("div", { className: "hermes-media-loading" },
-        "Loading media files…",
-      ),
+      loading && files.length === 0 && h("div", { className: "hermes-media-loading" }, "Loading media files\u2026"),
 
-      // Grid
+      // Grid: folders first, then files
       !loading && !error && !isEmpty && h("div", { className: "hermes-media-grid" },
+        // Folder cards
+        folders.map(function (folder) {
+          return h(FolderCard, {
+            key: "folder-" + folder.path,
+            folder: folder,
+            onOpen: navigateTo,
+            onDelete: handleDeleteFolder,
+            onRename: handleRenameFolder,
+            onDropFile: handleDropFile,
+            selected: !!selected[folder.path],
+            onSelect: toggleSelect,
+          });
+        }),
+        // File cards
         files.map(function (file) {
           return h(FileCard, {
             key: file.path,
@@ -845,13 +1112,15 @@
             onDelete: handleDelete,
             onPreview: setPreviewFile,
             onRename: handleRename,
+            selected: !!selected[file.path],
+            onSelect: toggleSelect,
           });
         }),
       ),
 
       // Empty
       !loading && !error && isEmpty && h("div", { className: "hermes-media-empty" },
-        h("div", { className: "hermes-media-empty-icon" }, "📁"),
+        h("div", { className: "hermes-media-empty-icon" }, "\uD83D\uDCC1"),
         h("p", { style: { fontWeight: 500, fontSize: "1rem" } }, "No media files yet"),
         h("p", null, "Upload files above or add files to /data/media"),
       ),
@@ -861,11 +1130,34 @@
         file: previewFile,
         onClose: function () { setPreviewFile(null); },
       }),
+
+      // Create folder dialog
+      showCreateFolder && h(CreateFolderDialog, {
+        parentPath: currentPath,
+        onClose: function () { setShowCreateFolder(false); },
+        onCreated: handleCreateFolder,
+      }),
+
+      // Batch delete confirm
+      showBatchDelete && h(ConfirmDialog, {
+        title: "Delete " + selectedCount + " files?",
+        message: "This will permanently delete " + selectedCount + " selected files.",
+        confirmLabel: "Delete All",
+        onConfirm: handleBatchDelete,
+        onCancel: function () { setShowBatchDelete(false); },
+      }),
+
+      // Move dialog
+      showMoveDialog && h(MoveDialog, {
+        folders: folders,
+        onMove: handleBatchMove,
+        onClose: function () { setShowMoveDialog(false); },
+      }),
     );
   }
 
   // -------------------------------------------------------------------
-  // Register the plugin component with the host
+  // Register
   // -------------------------------------------------------------------
 
   if (window.__HERMES_PLUGINS__ && typeof window.__HERMES_PLUGINS__.register === "function") {
