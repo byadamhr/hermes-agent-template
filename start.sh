@@ -48,6 +48,11 @@ rm -f /data/.hermes/gateway.pid
 mkdir -p "$HERMES_HOME"
 echo "docker" > "$HERMES_HOME/.install_method"
 
+# Install Python dependencies for translation scripts
+if [ -f /data/media/scripts/requirements.txt ]; then
+  pip install -q -r /data/media/scripts/requirements.txt 2>/dev/null || true
+fi
+
 # Auto-sync dashboard plugins from the repo into hermes's plugin directory.
 # The Dockerfile doesn't COPY plugins/ (it's dev-time code in the repo), but
 # hermes discovers dashboard plugins from ~/.hermes/plugins/<name>/dashboard/.
