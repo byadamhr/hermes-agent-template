@@ -59,8 +59,15 @@ fi
 # On Railway, the repo lives at /data/hermes-agent-template/ on the persistent
 # volume, so we sync plugin dashboards on every boot to pick up changes
 # without a full image rebuild.
-REPO_PLUGINS="/data/hermes-agent-template/plugins"
+REPO="/data/hermes-agent-template"
+REPO_PLUGINS="$REPO/plugins"
 HERMES_PLUGINS="$HERMES_HOME/plugins"
+
+# Pull latest from GitHub before syncing (ensures deploy picks up pushed changes)
+if [ -d "$REPO/.git" ]; then
+  cd "$REPO" && git pull --ff-only origin main 2>/dev/null || true
+fi
+
 if [ -d "$REPO_PLUGINS" ]; then
   for plugin_dir in "$REPO_PLUGINS"/*/dashboard; do
     [ -d "$plugin_dir" ] || continue
