@@ -3,7 +3,7 @@
   "label": "Media",
   "description": "Browse, preview, and manage media files",
   "icon": "Image",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "tab": {
     "path": "/media",
     "position": "after:skills"

@@ -1,5 +1,5 @@
 /*
- * Hermes Media — dashboard plugin styles.
+ * Hermes Media — dashboard plugin styles (v2)
  *
  * All colors reference theme CSS vars so the plugin reskins with the
  * active dashboard theme. No hardcoded palette.
@@ -7,20 +7,27 @@
 
 /* ================================================================
    Global: sidebar nav text visibility
-   The dashboard sidebar uses text-text-secondary (80% opacity) and
-   text-text-tertiary (65% opacity) which can be hard to read on
-   some themes.  Override to full-contrast card-foreground.
    ================================================================ */
 
 .sidebar [class*="text-text-secondary"],
-.sidebar [class*="text-text-tertiary"] {
+.sidebar [class*="text-text-tertiary"],
+.sidebar [class*="text-muted"],
+.sidebar [class*="opacity-"],
+.sidebar span,
+.sidebar a,
+.sidebar div {
   color: var(--color-card-foreground) !important;
+  opacity: 1 !important;
 }
 
-/* Plugin nav section headings (e.g. "Plugins", "System") */
 #hermes-sidebar-plugin-nav-heading {
   color: var(--color-card-foreground) !important;
-  opacity: 0.7;
+  opacity: 1 !important;
+}
+
+.sidebar a:hover,
+.sidebar a:focus {
+  opacity: 1 !important;
 }
 
 .hermes-media {
@@ -65,12 +72,127 @@
   gap: 0.75rem;
 }
 
+.hermes-media-header-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .hermes-media-count {
   font-size: 0.8rem;
   color: var(--color-muted-foreground, #9ca3af);
   background: var(--color-muted, #374151);
   padding: 0.15rem 0.6rem;
   border-radius: 9999px;
+}
+
+/* ---- Breadcrumbs ---- */
+
+.hermes-breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-muted-foreground, #9ca3af);
+}
+
+.hermes-breadcrumb-item {
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: var(--radius, 0.375rem);
+  transition: background 0.15s, color 0.15s;
+  color: var(--color-primary, #6366f1);
+}
+
+.hermes-breadcrumb-item:hover {
+  background: color-mix(in srgb, var(--color-primary, #6366f1) 12%, transparent);
+}
+
+.hermes-breadcrumb-item.active {
+  color: var(--color-card-foreground, #e5e7eb);
+  cursor: default;
+}
+
+.hermes-breadcrumb-item.active:hover {
+  background: transparent;
+}
+
+.hermes-breadcrumb-sep {
+  opacity: 0.4;
+  user-select: none;
+}
+
+/* ---- Batch toolbar ---- */
+
+.hermes-media-batch-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 0.75rem;
+  background: color-mix(in srgb, var(--color-primary, #6366f1) 8%, var(--color-card, #1f2937));
+  border: 1px solid color-mix(in srgb, var(--color-primary, #6366f1) 25%, var(--color-border, #374151));
+  border-radius: var(--radius, 0.5rem);
+  animation: hermes-media-fade-in 0.15s ease;
+}
+
+.hermes-media-batch-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-primary, #6366f1);
+  margin-right: 0.25rem;
+}
+
+.hermes-batch-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: var(--radius, 0.375rem);
+  cursor: pointer;
+  border: 1px solid var(--color-border, #374151);
+  background: var(--color-secondary, #1f2937);
+  color: var(--color-secondary-foreground, #e5e7eb);
+  transition: background 0.15s ease;
+}
+
+.hermes-batch-btn:hover {
+  background: var(--color-accent, #374151);
+}
+
+.hermes-batch-btn.danger {
+  color: #ef4444;
+  border-color: #991b1b;
+}
+
+.hermes-batch-btn.danger:hover {
+  background: #7f1d1d;
+  color: #fff;
+}
+
+/* ---- Checkbox ---- */
+
+.hermes-checkbox {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-border, #4b5563);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: #fff;
+  background: transparent;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.hermes-checkbox.checked {
+  background: var(--color-primary, #6366f1);
+  border-color: var(--color-primary, #6366f1);
+}
+
+.hermes-checkbox:hover {
+  border-color: var(--color-primary, #6366f1);
 }
 
 /* ---- Upload zone ---- */
@@ -158,6 +280,29 @@
   box-shadow: 0 0 0 1px var(--color-primary, #6366f1);
 }
 
+.hermes-media-card.selected {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 2px var(--color-primary, #6366f1);
+}
+
+/* Card select checkbox — top-left */
+.hermes-media-card-checkbox,
+.hermes-media-folder-checkbox {
+  position: absolute;
+  top: 0.4rem;
+  left: 0.4rem;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.hermes-media-card:hover .hermes-media-card-checkbox,
+.hermes-media-card.selected .hermes-media-card-checkbox,
+.hermes-media-folder-card:hover .hermes-media-folder-checkbox,
+.hermes-media-folder-card.selected .hermes-media-folder-checkbox {
+  opacity: 1;
+}
+
 /* Floating delete button — top-right corner */
 .hermes-media-card-delete {
   position: absolute;
@@ -180,13 +325,58 @@
   backdrop-filter: blur(4px);
 }
 
-.hermes-media-card:hover .hermes-media-card-delete {
+.hermes-media-card:hover .hermes-media-card-delete,
+.hermes-media-folder-card:hover .hermes-media-card-delete {
   opacity: 1;
 }
 
 .hermes-media-card-delete:hover {
   background: #991b1b;
   color: #fff;
+}
+
+/* ---- Folder card ---- */
+
+.hermes-media-folder-card {
+  position: relative;
+  background: var(--color-card, #1f2937);
+  border: 2px solid var(--color-border, #374151);
+  border-radius: var(--radius, 0.5rem);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.hermes-media-folder-card:hover {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 1px var(--color-primary, #6366f1);
+}
+
+.hermes-media-folder-card.selected {
+  border-color: var(--color-primary, #6366f1);
+  box-shadow: 0 0 0 2px var(--color-primary, #6366f1);
+}
+
+.hermes-media-folder-card.drag-over {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px #22c55e;
+  background: color-mix(in srgb, #22c55e 8%, var(--color-card, #1f2937));
+}
+
+.hermes-media-folder-body {
+  padding: 1.25rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  flex: 1;
+}
+
+.hermes-media-folder-icon {
+  font-size: 2.5rem;
+  line-height: 1;
 }
 
 /* ---- Preview area ---- */
@@ -609,4 +799,144 @@
   margin-top: 0.4rem;
   font-size: 0.8rem;
   color: #ef4444;
+}
+
+/* ================================================================
+   Move dialog
+   ================================================================ */
+
+.hermes-move-dialog {
+  max-width: 400px;
+}
+
+.hermes-move-list {
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0.75rem 0;
+  border: 1px solid var(--color-border, #374151);
+  border-radius: var(--radius, 0.5rem);
+}
+
+.hermes-move-item {
+  padding: 0.55rem 0.85rem;
+  font-size: 0.85rem;
+  color: var(--color-card-foreground, #e5e7eb);
+  cursor: pointer;
+  transition: background 0.1s;
+  border-bottom: 1px solid var(--color-border, #374151);
+}
+
+.hermes-move-item:last-child {
+  border-bottom: none;
+}
+
+.hermes-move-item:hover {
+  background: var(--color-accent, #374151);
+}
+
+.hermes-move-item.active {
+  background: color-mix(in srgb, var(--color-primary, #6366f1) 15%, var(--color-card, #1f2937));
+  color: var(--color-primary, #6366f1);
+  font-weight: 600;
+}
+
+/* ================================================================
+   Upload success confirmation
+   ================================================================ */
+
+.heres-media-upload-success {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--color-card, #1f2937);
+  border: 1px solid #22c55e;
+  border-radius: var(--radius, 0.5rem);
+  animation: hermes-media-fade-in 0.2s ease;
+}
+
+@keyframes hermes-media-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.hermes-media-upload-success-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #22c55e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.hermes-media-upload-success-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  color: #22c55e;
+  background: var(--color-muted, #111827);
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  word-break: break-all;
+  margin-bottom: 0.5rem;
+  user-select: all;
+}
+
+.hermes-media-upload-success-path code {
+  user-select: all;
+}
+
+.hermes-media-copy-btn {
+  width: 100%;
+  padding: 0.5rem 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  background: var(--color-primary, #6366f1);
+  color: #fff;
+  transition: background 0.15s;
+}
+
+.hermes-media-copy-btn:hover {
+  background: var(--color-accent, #818cf8);
+}
+
+.hermes-media-copy-btn.copied {
+  background: #22c55e;
+}
+
+.hermes-media-upload-success-hint {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  border-top: 1px solid var(--color-border, #374151);
+  padding-top: 0.5rem;
+  line-height: 1.6;
+}
+
+.hermes-media-upload-success-hint code {
+  color: var(--color-card-foreground, #e5e7eb);
+  background: var(--color-muted, #111827);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.hermes-media-upload-success-dismiss {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  color: var(--color-muted-foreground, #9ca3af);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.hermes-media-upload-success-dismiss:hover {
+  color: var(--color-card-foreground, #e5e7eb);
 }
