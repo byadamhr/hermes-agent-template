@@ -455,6 +455,30 @@
       // Actions
       h("div", { className: "hermes-media-actions" },
         h("button", { onClick: function (e) { e.stopPropagation(); onOpen(folder.path); } }, "\uD83D\uDCC2 Open"),
+        h("button", { onClick: function (e) {
+          e.stopPropagation();
+          // Download all files in this folder
+          authFetch(API + "/files?path=" + encodeURIComponent(folder.path))
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              if (!data.files || data.files.length === 0) return;
+              var delay = 300;
+              data.files.forEach(function (f, idx) {
+                setTimeout(function () {
+                  var url = API + "/file/" + encodeURIComponent(f.path);
+                  authFetch(url).then(function (res) { return res.blob(); }).then(function (blob) {
+                    var a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = f.name;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(a.href);
+                  });
+                }, idx * delay);
+              });
+            });
+        } }, "\u2B07 Download"),
         h("button", { onClick: function (e) { e.stopPropagation(); setShowRename(true); } }, "\u270F Rename"),
       ),
       showConfirm && h(ConfirmDialog, {
@@ -834,12 +858,14 @@
     var onDelete = props.onDelete;
     var onMove = props.onMove;
     var onClear = props.onClear;
+    var onDownloadAll = props.onDownloadAll;
     var folders = props.folders;
 
     if (selectedCount === 0) return null;
 
     return h("div", { className: "hermes-media-batch-toolbar" },
       h("span", { className: "hermes-media-batch-count" }, selectedCount + " selected"),
+      h("button", { className: "hermes-batch-btn", onClick: onDownloadAll }, "\u2B07 Download All"),
       h("button", { className: "hermes-batch-btn danger", onClick: onDelete }, "\u2715 Delete"),
       folders.length > 0 && h("button", { className: "hermes-batch-btn", onClick: onMove }, "\u2191 Move to\u2026"),
       h("button", { className: "hermes-batch-btn", onClick: onClear }, "Clear"),
@@ -999,6 +1025,59 @@
 
     var clearSelection = useCallback(function () { setSelected({}); }, []);
 
+    // Batch download — downloads all selected files (and files inside selected folders)
+    var downloadAllFiles = useCallback(function () {
+      var paths = Object.keys(selected);
+      if (paths.length === 0) return;
+
+      // Separate files and folders
+      var selectedFiles = paths.filter(function (p) {
+        return files.some(function (f) { return f.path === p; });
+      });
+      var selectedFolders = paths.filter(function (p) {
+        return folders.some(function (f) { return f.path === p; });
+      });
+
+      // Collect all file paths to download
+      var allFilePaths = selectedFiles.slice();
+
+      // For folders, fetch contents and add their files
+      var folderPromises = selectedFolders.map(function (fp) {
+        return authFetch(API + "/files?path=" + encodeURIComponent(fp))
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.files) {
+              data.files.forEach(function (f) { allFilePaths.push(f.path); });
+            }
+          });
+      });
+
+      Promise.all(folderPromises).then(function () {
+        if (allFilePaths.length === 0) return;
+
+        // Fetch all file metadata for names
+        var fileLookup = {};
+        files.forEach(function (f) { fileLookup[f.path] = f.name; });
+
+        var delay = 300; // ms between downloads
+        allFilePaths.forEach(function (p, idx) {
+          setTimeout(function () {
+            var name = fileLookup[p] || p.split("/").pop();
+            var url = API + "/file/" + encodeURIComponent(p);
+            authFetch(url).then(function (res) { return res.blob(); }).then(function (blob) {
+              var a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = name;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(a.href);
+            });
+          }, idx * delay);
+        });
+      });
+    }, [selected, files, folders]);
+
     var selectedCount = Object.keys(selected).length;
 
     // Batch delete
@@ -1076,6 +1155,7 @@
         onDelete: function () { setShowBatchDelete(true); },
         onMove: function () { setShowMoveDialog(true); },
         onClear: clearSelection,
+        onDownloadAll: downloadAllFiles,
       }),
 
       // Error
