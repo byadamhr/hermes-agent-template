@@ -129,8 +129,8 @@ def get_demo_state():
         agents.append({"id": f"worker-{i}", "label": f"Worker-{i}", "state": s})
 
     file_names = [
-        "GB_T_4501", "GB_T_4502", "GB_T_4503", "GB_T_4504",
-        "GB_T_4505", "GB_T_4506", "GB_T_4507", "GB_T_4508",
+        "File-001", "File-002", "File-003", "File-004",
+        "File-005", "File-006", "File-007", "File-008",
     ]
     file_states = ["processing", "processing", "processing", "queued",
                    "queued", "complete", "complete", "queued"]

@@ -38,6 +38,13 @@
       default: return C.idle;
     }
   }
+  function fmtEta(sec) {
+    if (sec == null || sec <= 0) return "\u2014";
+    if (sec < 60) return sec + "s";
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m + "m " + (s > 0 ? s + "s" : "");
+  }
 
   // ─── Node ─────────────────────────────────────────────────────
   function makeNode(id, x, y, type, label, state, radius) {
@@ -64,8 +71,6 @@
 
   function drawNode(ctx, n, t) {
     var color = stateColor(n.state);
-
-    // Outer glow
     var glowR = n.radius * (3 + n.glowIntensity * 4);
     var glow = ctx.createRadialGradient(n.x, n.y, n.radius * 0.5, n.x, n.y, glowR);
     glow.addColorStop(0, hexToRgba(color, 0.3 * n.glowIntensity));
@@ -76,7 +81,6 @@
     ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
     ctx.fill();
 
-    // Core
     ctx.fillStyle = color;
     ctx.shadowColor = color;
     ctx.shadowBlur = 12 * n.glowIntensity;
@@ -85,7 +89,6 @@
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Inner highlight
     var hl = ctx.createRadialGradient(
       n.x - n.radius * 0.3, n.y - n.radius * 0.3, 0,
       n.x, n.y, n.radius
@@ -97,7 +100,6 @@
     ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Flash ring on pulse arrival
     if (n.flashTime > 0) {
       var age = t - n.flashTime;
       if (age < 1) {
@@ -110,11 +112,10 @@
       }
     }
 
-    // Label
     ctx.fillStyle = hexToRgba(C.text, 0.6 + n.glowIntensity * 0.4);
-    ctx.font = "9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
-    ctx.fillText(n.label, n.x, n.y + n.radius + 13);
+    ctx.fillText(n.label, n.x, n.y + n.radius + 15);
   }
 
   // ─── Connection ───────────────────────────────────────────────
@@ -141,8 +142,8 @@
     var mx = (ax + bx) / 2, my = (ay + by) / 2;
     var dx = bx - ax, dy = by - ay;
     var offset = Math.sin(simT * 0.5 + ax * 0.01) * 12;
-    var cx = mx + dy * offset * 0.01;
-    var cy = my - dx * offset * 0.01;
+    var cx2 = mx + dy * offset * 0.01;
+    var cy2 = my - dx * offset * 0.01;
 
     ctx.strokeStyle = conn.activity > 0.01
       ? hexToRgba(C.active, 0.05 + conn.activity * 0.3)
@@ -150,11 +151,11 @@
     ctx.lineWidth = 1 + conn.activity * 1.5;
     ctx.beginPath();
     ctx.moveTo(ax, ay);
-    ctx.quadraticCurveTo(cx, cy, bx, by);
+    ctx.quadraticCurveTo(cx2, cy2, bx, by);
     ctx.stroke();
   }
 
-  // ─── Pulse (particle) ────────────────────────────────────────
+  // ─── Pulse ────────────────────────────────────────────────────
   function makePulse(conn) {
     return { conn: conn, t: 0, speed: 0.35 + Math.random() * 0.3, alive: true, size: 2.5 + Math.random() * 1.5, trail: [] };
   }
@@ -198,12 +199,10 @@
     var nodes = [];
     var nodeMap = {};
 
-    // Orchestrator at center
     var orch = makeNode("orchestrator", cx, cy, "agent", "Orchestrator", "active", 18);
     nodes.push(orch);
     nodeMap["orchestrator"] = orch;
 
-    // Agents in inner ring
     var agentR = Math.min(W, H) * 0.2;
     var agentOnly = agents.filter(function (a) { return a.id !== "orchestrator"; });
     agentOnly.forEach(function (a, i) {
@@ -213,7 +212,6 @@
       nodeMap[a.id] = n;
     });
 
-    // Files in outer ring
     var fileR = Math.min(W, H) * 0.36;
     files.forEach(function (f, i) {
       var angle = (i / files.length) * Math.PI * 2 + Math.PI / 8;
@@ -227,24 +225,16 @@
       nodeMap[f.id] = n;
     });
 
-    // Connections: orchestrator → agents
     var connections = [];
     agentOnly.forEach(function (a) {
       if (nodeMap[a.id]) {
         connections.push(makeConnection(orch, nodeMap[a.id]));
       }
     });
-
-    // Connections: agents → assigned files
     files.forEach(function (f) {
       if (f.agent && nodeMap[f.agent] && nodeMap[f.id]) {
         connections.push(makeConnection(nodeMap[f.agent], nodeMap[f.id]));
       }
-    });
-
-    // Set activity on connections with pulses
-    connections.forEach(function (c) {
-      // Will be activated when pulses arrive
     });
 
     return { nodes: nodes, connections: connections, nodeMap: nodeMap };
@@ -274,19 +264,16 @@
       sim.simTime = performance.now() / 1000;
       sim.lastTime = performance.now() / 1000;
 
-      // Layout from state data
       var layout = layoutNodes(stateData.agents || [], stateData.files || [], width, height);
       sim.nodes = layout.nodes;
       sim.connections = layout.connections;
       sim.nodeMap = layout.nodeMap;
       sim.pulses = [];
 
-      // Activate connections that have pulses
       (stateData.pulses || []).forEach(function (p) {
         var fromNode = layout.nodeMap[p.from];
         var toNode = layout.nodeMap[p.to];
         if (fromNode && toNode) {
-          // Find or create connection
           var conn = sim.connections.find(function (c) {
             return c.from.id === p.from && c.to.id === p.to;
           });
@@ -295,7 +282,6 @@
             sim.connections.push(conn);
           }
           conn.activity = 1;
-          // Spawn a pulse
           sim.pulses.push(makePulse(conn));
         }
       });
@@ -307,7 +293,6 @@
         sim.lastTime = now;
         sim.simTime += dt;
 
-        // FPS
         sim.fpsFrames++;
         sim.fpsTime += rawDt;
         if (sim.fpsTime >= 0.5) {
@@ -316,19 +301,16 @@
           sim.fpsTime = 0;
         }
 
-        // Fade connections
         for (var ci = 0; ci < sim.connections.length; ci++) {
           var c = sim.connections[ci];
           if (c.activity > 0) c.activity = Math.max(0, c.activity - dt * 0.5);
         }
 
-        // Update pulses
         for (var pi = sim.pulses.length - 1; pi >= 0; pi--) {
           updatePulse(sim.pulses[pi], dt, sim.simTime);
           if (!sim.pulses[pi].alive) sim.pulses.splice(pi, 1);
         }
 
-        // Auto-spawn pulses on active connections
         if (Math.random() < 0.02) {
           var activeConns = sim.connections.filter(function (c) { return c.activity > 0.3; });
           if (activeConns.length) {
@@ -336,16 +318,13 @@
           }
         }
 
-        // Update nodes
         for (var ni = 0; ni < sim.nodes.length; ni++) {
           updateNode(sim.nodes[ni], sim.simTime, dt);
         }
 
-        // ── Draw ──
         ctx.fillStyle = "rgba(10,14,26,0.25)";
         ctx.fillRect(0, 0, width, height);
 
-        // Grid
         ctx.strokeStyle = "rgba(100,255,218,0.015)";
         ctx.lineWidth = 0.5;
         for (var gx = 0; gx < width; gx += 50) {
@@ -355,35 +334,26 @@
           ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke();
         }
 
-        // Connections
         for (var ci2 = 0; ci2 < sim.connections.length; ci2++) {
           drawConnection(ctx, sim.connections[ci2], sim.simTime);
         }
-
-        // Pulses
         for (var pi2 = 0; pi2 < sim.pulses.length; pi2++) {
           drawPulse(ctx, sim.pulses[pi2], sim.simTime);
         }
-
-        // Nodes
         for (var ni2 = 0; ni2 < sim.nodes.length; ni2++) {
           drawNode(ctx, sim.nodes[ni2], sim.simTime);
         }
 
-        // FPS badge
         ctx.fillStyle = "rgba(100,255,218,0.5)";
-        ctx.font = "10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
         ctx.textAlign = "right";
-        ctx.fillText(sim.fps + " FPS", width - 8, 14);
+        ctx.fillText(sim.fps + " FPS", width - 8, 16);
 
         animRef.current = requestAnimationFrame(frame);
       }
 
       animRef.current = requestAnimationFrame(frame);
-
-      return function () {
-        if (animRef.current) cancelAnimationFrame(animRef.current);
-      };
+      return function () { if (animRef.current) cancelAnimationFrame(animRef.current); };
     }, [stateData, width, height]);
 
     return h("canvas", {
@@ -392,23 +362,62 @@
     });
   }
 
+  // ─── File List Component ──────────────────────────────────────
+  function FileListPanel(props) {
+    var files = props.files || [];
+    if (!files.length) return null;
+
+    return h("div", { className: "synapse-filelist" },
+      h("div", { className: "synapse-filelist-title" }, "Files"),
+      files.map(function (f) {
+        var pct = Math.round((f.progress || 0) * 100);
+        var cls = "synapse-file" + (f.state ? " " + f.state : "");
+        return h("div", { key: f.id, className: cls },
+          h("div", { className: "synapse-file-header" },
+            h("span", { className: "synapse-file-name", title: f.label }, f.label),
+            h("span", { className: "synapse-file-status" + (f.state ? " " + f.state : "") },
+              f.state === "processing" ? "ACTIVE" : f.state === "complete" ? "DONE" : "WAIT"
+            ),
+          ),
+          h("div", { className: "synapse-progress-track" },
+            h("div", {
+              className: "synapse-progress-fill" + (f.state ? " " + f.state : ""),
+              style: { width: pct + "%" },
+            }),
+          ),
+          h("div", { className: "synapse-file-footer" },
+            h("span", { className: "synapse-eta" },
+              f.state === "processing" ? "ETA " + fmtEta(f.eta_seconds) :
+              f.state === "complete" ? "Complete" :
+              f.state === "queued" ? "Queued" : "\u2014"
+            ),
+            h("span", { className: "synapse-progress-pct" }, pct + "%"),
+          ),
+        );
+      }),
+    );
+  }
+
   // ─── Main Plugin Component ────────────────────────────────────
   function SynapseMonitor() {
-    var _s1 = useState(null);    // stateData
+    var _s1 = useState(null);
     var stateData = _s1[0]; var setStateData = _s1[1];
-    var _s2 = useState(false);   // minimized
+    var _s2 = useState(false);
     var minimized = _s2[0]; var setMinimized = _s2[1];
-    var _s3 = useState(false);   // closed
+    var _s3 = useState(false);
     var closed = _s3[0]; var setClosed = _s3[1];
-    var _s4 = useState("demo");  // mode: demo | live
+    var _s4 = useState("demo");
     var mode = _s4[0]; var setMode = _s4[1];
-    var _s5 = useState(0);       // refresh counter
+    var _s5 = useState(0);
     var refreshCounter = _s5[0]; var setRefreshCounter = _s5[1];
+    var _s6 = useState(false);
+    var poppedOut = _s6[0]; var setPoppedOut = _s6[1];
+    var _s7 = useState({ w: 660, h: 450 });
+    var dims = _s7[0]; var setDims = _s7[1];
     var containerRef = useRef(null);
-    var _s6 = useState({ w: 800, h: 500 });
-    var dims = _s6[0]; var setDims = _s6[1];
+    var dragRef = useRef({ dragging: false, startX: 0, startY: 0 });
 
-    // Fetch state from API
+    // Fetch state
     var fetchState = useCallback(function () {
       var url = mode === "demo"
         ? "/api/plugins/synapse/demo"
@@ -418,7 +427,6 @@
         .catch(function (e) { console.error("Synapse fetch error:", e); });
     }, [mode]);
 
-    // Poll for updates
     useEffect(function () {
       if (closed) return;
       fetchState();
@@ -432,20 +440,46 @@
       var ro = new ResizeObserver(function (entries) {
         for (var i = 0; i < entries.length; i++) {
           var rect = entries[i].contentRect;
-          setDims({ w: Math.floor(rect.width), h: Math.floor(rect.height) });
+          if (rect.width > 100 && rect.height > 100) {
+            setDims({ w: Math.floor(rect.width), h: Math.floor(rect.height) });
+          }
         }
       });
       ro.observe(containerRef.current);
       return function () { ro.disconnect(); };
-    }, [closed]);
+    }, [closed, poppedOut]);
 
-    // Reopen handler
+    // Drag handlers (for pop-out mode)
+    var onDragStart = useCallback(function (e) {
+      if (!poppedOut) return;
+      dragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY };
+      var onMove = function (ev) {
+        if (!dragRef.current.dragging) return;
+        var el = containerRef.current;
+        if (!el) return;
+        var dx = ev.clientX - dragRef.current.startX;
+        var dy = ev.clientY - dragRef.current.startY;
+        dragRef.current.startX = ev.clientX;
+        dragRef.current.startY = ev.clientY;
+        el.style.left = (el.offsetLeft + dx) + "px";
+        el.style.top = (el.offsetTop + dy) + "px";
+        el.style.right = "auto";
+      };
+      var onUp = function () {
+        dragRef.current.dragging = false;
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    }, [poppedOut]);
+
     var handleReopen = useCallback(function () {
       setClosed(false);
       setRefreshCounter(function (c) { return c + 1; });
     }, []);
 
-    // ── Closed state: floating reopen button ──
+    // ── Closed state ──
     if (closed) {
       return h("div", { className: "synapse-closed-badge", onClick: handleReopen },
         h("span", { className: "synapse-closed-icon" }, "\u2B21"),
@@ -453,7 +487,7 @@
       );
     }
 
-    // ── Stats bar ──
+    // ── Stats ──
     var stats = (stateData && stateData.stats) || {};
     var statsBar = h("div", { className: "synapse-stats" },
       h("div", { className: "synapse-stat" },
@@ -475,7 +509,10 @@
     );
 
     // ── Toolbar ──
-    var toolbar = h("div", { className: "synapse-toolbar" },
+    var toolbar = h("div", {
+      className: "synapse-toolbar",
+      onMouseDown: poppedOut ? onDragStart : undefined,
+    },
       h("div", { className: "synapse-toolbar-left" },
         h("span", { className: "synapse-title" }, "\u2B21 Synapse Monitor"),
         h("button", {
@@ -489,6 +526,11 @@
       ),
       h("div", { className: "synapse-toolbar-right" },
         h("button", {
+          className: "synapse-btn synapse-btn-popout",
+          onClick: function () { setPoppedOut(!poppedOut); },
+          title: poppedOut ? "Dock back" : "Pop out (float on top)",
+        }, poppedOut ? "\u21A4" : "\u2B1A"),
+        h("button", {
           className: "synapse-btn",
           onClick: function () { setMinimized(!minimized); },
           title: minimized ? "Expand" : "Minimize",
@@ -496,24 +538,34 @@
         h("button", {
           className: "synapse-btn synapse-btn-close",
           onClick: function () { setClosed(true); },
-          title: "Close (reopen from sidebar)",
+          title: "Close",
         }, "\u2715"),
       ),
     );
 
-    // ── Canvas (hidden when minimized) ──
+    // ── Canvas ──
     var canvasArea = minimized
       ? null
       : h("div", { ref: containerRef, className: "synapse-canvas-wrap" },
           stateData
-            ? h(SynapseCanvas, { stateData: stateData, width: dims.w || 800, height: dims.h || 450 })
+            ? h(SynapseCanvas, { stateData: stateData, width: dims.w, height: dims.h })
             : h("div", { className: "synapse-loading" }, "Loading..."),
         );
 
-    return h("div", { className: "synapse-plugin" },
+    // ── File list ──
+    var fileList = minimized
+      ? null
+      : h(FileListPanel, { files: (stateData && stateData.files) || [] });
+
+    var pluginCls = "synapse-plugin" + (poppedOut ? " popped-out" : "");
+
+    return h("div", { className: pluginCls },
       toolbar,
       statsBar,
-      canvasArea,
+      h("div", { className: "synapse-body" },
+        fileList,
+        canvasArea,
+      ),
     );
   }
 

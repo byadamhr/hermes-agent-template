@@ -1,5 +1,6 @@
 /* ─── Synapse Monitor Plugin Styles ───────────────────────────── */
 
+/* ── Main container (docked) ─────────────────────────────────── */
 .synapse-plugin {
   display: flex;
   flex-direction: column;
@@ -11,31 +12,56 @@
   overflow: hidden;
 }
 
-/* ── Toolbar ──────────────────────────────────────────────────── */
+/* ── Pop-out mode ────────────────────────────────────────────── */
+.synapse-plugin.popped-out {
+  position: fixed;
+  top: 60px;
+  right: 20px;
+  width: 900px;
+  height: 620px;
+  min-height: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(100, 255, 218, 0.08);
+  z-index: 9999;
+  resize: both;
+  overflow: hidden;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────── */
 .synapse-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
+  padding: 10px 16px;
   background: rgba(20, 24, 31, 0.95);
   border-bottom: 1px solid rgba(100, 255, 218, 0.08);
   flex-shrink: 0;
+  cursor: default;
+}
+
+/* Drag handle when popped out */
+.synapse-plugin.popped-out .synapse-toolbar {
+  cursor: grab;
+}
+.synapse-plugin.popped-out .synapse-toolbar:active {
+  cursor: grabbing;
 }
 
 .synapse-toolbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .synapse-toolbar-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .synapse-title {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: #64ffda;
   letter-spacing: 1px;
@@ -46,8 +72,8 @@
   border: 1px solid rgba(100, 255, 218, 0.15);
   color: #8892b0;
   font-family: inherit;
-  font-size: 10px;
-  padding: 3px 10px;
+  font-size: 12px;
+  padding: 4px 12px;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
@@ -69,9 +95,9 @@
   border: 1px solid rgba(100, 255, 218, 0.12);
   color: #8892b0;
   font-family: inherit;
-  font-size: 12px;
-  width: 26px;
-  height: 26px;
+  font-size: 14px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -86,17 +112,22 @@
   color: #64ffda;
 }
 
+.synapse-btn-popout:hover {
+  background: rgba(100, 255, 218, 0.2);
+  color: #64ffda;
+}
+
 .synapse-btn-close:hover {
   background: rgba(248, 81, 73, 0.2);
   border-color: rgba(248, 81, 73, 0.4);
   color: #f85149;
 }
 
-/* ── Stats bar ────────────────────────────────────────────────── */
+/* ── Stats bar ───────────────────────────────────────────────── */
 .synapse-stats {
   display: flex;
-  gap: 16px;
-  padding: 8px 14px;
+  gap: 20px;
+  padding: 10px 16px;
   background: rgba(20, 24, 31, 0.7);
   border-bottom: 1px solid rgba(100, 255, 218, 0.05);
   flex-shrink: 0;
@@ -105,8 +136,8 @@
 .synapse-stat {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: 8px;
+  font-size: 13px;
 }
 
 .synapse-stat-label {
@@ -122,10 +153,157 @@
 .synapse-stat-queued { color: #6b7688; }
 .synapse-stat-complete { color: #45b764; }
 
-/* ── Canvas area ──────────────────────────────────────────────── */
+/* ── Main content area (file list + canvas) ──────────────────── */
+.synapse-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── File list panel (left) ──────────────────────────────────── */
+.synapse-filelist {
+  width: 220px;
+  min-width: 220px;
+  background: rgba(14, 18, 28, 0.95);
+  border-right: 1px solid rgba(100, 255, 218, 0.06);
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.synapse-filelist::-webkit-scrollbar { width: 4px; }
+.synapse-filelist::-webkit-scrollbar-track { background: transparent; }
+.synapse-filelist::-webkit-scrollbar-thumb { background: rgba(100,255,218,0.15); border-radius: 2px; }
+
+.synapse-filelist-title {
+  font-size: 11px;
+  color: #5a6580;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 4px 6px 6px;
+}
+
+/* ── File card ───────────────────────────────────────────────── */
+.synapse-file {
+  border: 1px solid rgba(100, 255, 218, 0.1);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(20, 24, 31, 0.5);
+  transition: border-color 0.2s, background 0.2s;
+  cursor: default;
+}
+
+.synapse-file:hover {
+  border-color: rgba(100, 255, 218, 0.2);
+  background: rgba(20, 24, 31, 0.8);
+}
+
+.synapse-file.processing {
+  border-color: rgba(255, 179, 71, 0.3);
+}
+
+.synapse-file.complete {
+  border-color: rgba(69, 183, 100, 0.3);
+}
+
+.synapse-file-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.synapse-file-name {
+  font-size: 12px;
+  color: #ccd6f6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px;
+}
+
+.synapse-file-status {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.synapse-file-status.processing {
+  background: rgba(255, 179, 71, 0.15);
+  color: #ffb347;
+}
+
+.synapse-file-status.queued {
+  background: rgba(107, 118, 136, 0.15);
+  color: #6b7688;
+}
+
+.synapse-file-status.complete {
+  background: rgba(69, 183, 100, 0.15);
+  color: #45b764;
+}
+
+/* ── Progress bar ────────────────────────────────────────────── */
+.synapse-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(100, 255, 218, 0.06);
+  border: 1px solid rgba(100, 255, 218, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.synapse-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.synapse-progress-fill.processing {
+  background: linear-gradient(90deg, #ffb347, #ffc875);
+  box-shadow: 0 0 6px rgba(255, 179, 71, 0.4);
+}
+
+.synapse-progress-fill.queued {
+  background: rgba(107, 118, 136, 0.3);
+}
+
+.synapse-progress-fill.complete {
+  background: linear-gradient(90deg, #45b764, #5dd87a);
+  box-shadow: 0 0 6px rgba(69, 183, 100, 0.4);
+}
+
+/* ── ETA row ─────────────────────────────────────────────────── */
+.synapse-file-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #5a6580;
+}
+
+.synapse-eta {
+  color: #8892b0;
+  font-variant-numeric: tabular-nums;
+}
+
+.synapse-progress-pct {
+  color: #64ffda;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Canvas area ─────────────────────────────────────────────── */
 .synapse-canvas-wrap {
   flex: 1;
-  min-height: 450px;
+  min-width: 0;
+  min-height: 400px;
   overflow: hidden;
   position: relative;
 }
@@ -140,21 +318,21 @@
   justify-content: center;
   height: 100%;
   color: #5a6580;
-  font-size: 13px;
+  font-size: 14px;
 }
 
-/* ── Closed state: floating reopen badge ──────────────────────── */
+/* ── Closed state: floating reopen badge ─────────────────────── */
 .synapse-closed-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 8px 18px;
   background: rgba(100, 255, 218, 0.08);
   border: 1px solid rgba(100, 255, 218, 0.2);
   border-radius: 20px;
   color: #64ffda;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
   user-select: none;
@@ -168,10 +346,5 @@
 }
 
 .synapse-closed-icon {
-  font-size: 14px;
-}
-
-/* ── Minimized state: compact stats only ──────────────────────── */
-.synapse-plugin[data-minimized="true"] .synapse-canvas-wrap {
-  display: none;
+  font-size: 15px;
 }

@@ -7,14 +7,14 @@
     {"id": "worker-4", "label": "Worker-4", "state": "idle"}
   ],
   "files": [
-    {"id": "f1", "label": "GB_T_4501.docx", "state": "processing", "agent": "worker-1"},
-    {"id": "f2", "label": "GB_T_4502.docx", "state": "processing", "agent": "worker-1"},
-    {"id": "f3", "label": "GB_T_4503.docx", "state": "processing", "agent": "worker-2"},
-    {"id": "f4", "label": "GB_T_4504.docx", "state": "queued"},
-    {"id": "f5", "label": "GB_T_4505.docx", "state": "queued"},
-    {"id": "f6", "label": "GB_T_4506.docx", "state": "complete"},
-    {"id": "f7", "label": "GB_T_4507.docx", "state": "complete"},
-    {"id": "f8", "label": "GB_T_4508.docx", "state": "queued"}
+    {"id": "f1", "label": "File-001.docx", "state": "processing", "agent": "worker-1", "progress": 0.82, "eta_seconds": 45},
+    {"id": "f2", "label": "File-002.docx", "state": "processing", "agent": "worker-1", "progress": 0.45, "eta_seconds": 180},
+    {"id": "f3", "label": "File-003.docx", "state": "processing", "agent": "worker-2", "progress": 0.67, "eta_seconds": 90},
+    {"id": "f4", "label": "File-004.docx", "state": "queued", "agent": null, "progress": 0, "eta_seconds": null},
+    {"id": "f5", "label": "File-005.docx", "state": "queued", "agent": null, "progress": 0, "eta_seconds": null},
+    {"id": "f6", "label": "File-006.docx", "state": "complete", "agent": null, "progress": 1.0, "eta_seconds": 0},
+    {"id": "f7", "label": "File-007.docx", "state": "complete", "agent": null, "progress": 1.0, "eta_seconds": 0},
+    {"id": "f8", "label": "File-008.docx", "state": "queued", "agent": null, "progress": 0, "eta_seconds": null}
   ],
   "pulses": [
     {"from": "worker-1", "to": "f1", "active": true},
