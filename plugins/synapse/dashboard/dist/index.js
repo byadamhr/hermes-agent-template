@@ -238,46 +238,54 @@
     return { nodes: nodes, connections: connections, nodeMap: nodeMap };
   }
 
-  // ─── Canvas Renderer ──────────────────────────────────────────
+  // ─── Canvas Renderer (smooth — no recreate on state update) ───
   function SynapseCanvas(props) {
-    var stateData = props.stateData;
-    var width = props.width;
-    var height = props.height;
     var canvasRef = useRef(null);
     var animRef = useRef(null);
-    var simRef = useRef({ nodes: [], connections: [], pulses: [], simTime: 0, lastTime: 0, fps: 0, fpsFrames: 0, fpsTime: 0 });
+    var stateRef = useRef(props.stateData);
+    var simRef = useRef({ nodes: [], connections: [], pulses: [], simTime: 0, lastTime: 0, fps: 0, fpsFrames: 0, fpsTime: 0, initialized: false });
+
+    // Update state data without recreating canvas
+    stateRef.current = props.stateData;
 
     useEffect(function () {
       var canvas = canvasRef.current;
       if (!canvas) return;
       var ctx = canvas.getContext("2d");
       var dpr = window.devicePixelRatio || 1;
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
-      canvas.style.width = width + "px";
-      canvas.style.height = height + "px";
+      var W = props.width, H = props.height;
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
+      canvas.style.width = W + "px";
+      canvas.style.height = H + "px";
       ctx.scale(dpr, dpr);
 
       var sim = simRef.current;
       sim.simTime = performance.now() / 1000;
       sim.lastTime = performance.now() / 1000;
 
-      var layout = layoutNodes(stateData.agents || [], stateData.files || [], width, height);
+      // Initial layout
+      var data = stateRef.current;
+      var layout = layoutNodes(data.agents || [], data.files || [], W, H);
       sim.nodes = layout.nodes;
       sim.connections = layout.connections;
       sim.nodeMap = layout.nodeMap;
       sim.pulses = [];
+      sim.initialized = true;
 
-      (stateData.pulses || []).forEach(function (p) {
-        var fromNode = layout.nodeMap[p.from];
-        var toNode = layout.nodeMap[p.to];
-        if (fromNode && toNode) {
-          var conn = sim.connections.find(function (c) { return c.from.id === p.from && c.to.id === p.to; });
-          if (!conn) { conn = makeConnection(fromNode, toNode); sim.connections.push(conn); }
-          conn.activity = 1;
-          sim.pulses.push(makePulse(conn));
+      // Activate initial pulses
+      (data.pulses || []).forEach(function (p) {
+        var fn = sim.nodeMap[p.from], tn = sim.nodeMap[p.to];
+        if (fn && tn) {
+          var c = sim.connections.find(function (x) { return x.from.id === p.from && x.to.id === p.to; });
+          if (!c) { c = makeConnection(fn, tn); sim.connections.push(c); }
+          c.activity = 1;
+          sim.pulses.push(makePulse(c));
         }
       });
+
+      // Track last known state for incremental updates
+      var lastStateHash = JSON.stringify(data);
 
       function frame() {
         var now = performance.now() / 1000;
@@ -289,16 +297,42 @@
         sim.fpsTime += rawDt;
         if (sim.fpsTime >= 0.5) { sim.fps = Math.round(sim.fpsFrames / sim.fpsTime); sim.fpsFrames = 0; sim.fpsTime = 0; }
 
+        // Check for state updates (incremental — no canvas rebuild)
+        var newData = stateRef.current;
+        var newHash = JSON.stringify(newData);
+        if (newHash !== lastStateHash) {
+          lastStateHash = newHash;
+          // Update node states without recreating
+          (newData.agents || []).forEach(function (a) {
+            var node = sim.nodeMap[a.id];
+            if (node) node.state = a.state;
+          });
+          (newData.files || []).forEach(function (f) {
+            var node = sim.nodeMap[f.id];
+            if (node) node.state = f.state;
+          });
+          // Activate new pulses
+          (newData.pulses || []).forEach(function (p) {
+            var fn = sim.nodeMap[p.from], tn = sim.nodeMap[p.to];
+            if (fn && tn) {
+              var c = sim.connections.find(function (x) { return x.from.id === p.from && x.to.id === p.to; });
+              if (c && c.activity < 0.5) { c.activity = 1; sim.pulses.push(makePulse(c)); }
+            }
+          });
+        }
+
+        // Update simulation
         for (var ci = 0; ci < sim.connections.length; ci++) { if (sim.connections[ci].activity > 0) sim.connections[ci].activity = Math.max(0, sim.connections[ci].activity - rawDt * 0.5); }
         for (var pi = sim.pulses.length - 1; pi >= 0; pi--) { updatePulse(sim.pulses[pi], rawDt, sim.simTime); if (!sim.pulses[pi].alive) sim.pulses.splice(pi, 1); }
         if (Math.random() < 0.02) { var ac = sim.connections.filter(function (c) { return c.activity > 0.3; }); if (ac.length) sim.pulses.push(makePulse(ac[Math.floor(Math.random() * ac.length)])); }
         for (var ni = 0; ni < sim.nodes.length; ni++) updateNode(sim.nodes[ni], sim.simTime, rawDt);
 
+        // Draw
         ctx.fillStyle = "rgba(10,14,26,0.25)";
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, W, H);
         ctx.strokeStyle = "rgba(100,255,218,0.015)"; ctx.lineWidth = 0.5;
-        for (var gx = 0; gx < width; gx += 50) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke(); }
-        for (var gy = 0; gy < height; gy += 50) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke(); }
+        for (var gx = 0; gx < W; gx += 50) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+        for (var gy = 0; gy < H; gy += 50) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
         for (var ci2 = 0; ci2 < sim.connections.length; ci2++) drawConnection(ctx, sim.connections[ci2], sim.simTime);
         for (var pi2 = 0; pi2 < sim.pulses.length; pi2++) drawPulse(ctx, sim.pulses[pi2], sim.simTime);
         for (var ni2 = 0; ni2 < sim.nodes.length; ni2++) drawNode(ctx, sim.nodes[ni2], sim.simTime);
@@ -306,15 +340,15 @@
         ctx.fillStyle = "rgba(100,255,218,0.5)";
         ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
         ctx.textAlign = "right";
-        ctx.fillText(sim.fps + " FPS", width - 8, 16);
+        ctx.fillText(sim.fps + " FPS", W - 8, 16);
 
         animRef.current = requestAnimationFrame(frame);
       }
       animRef.current = requestAnimationFrame(frame);
       return function () { if (animRef.current) cancelAnimationFrame(animRef.current); };
-    }, [stateData, width, height]);
+    }, [props.width, props.height]); // Only recreate on resize, NOT on stateData change
 
-    return h("canvas", { ref: canvasRef, style: { display: "block", width: width + "px", height: height + "px" } });
+    return h("canvas", { ref: canvasRef, style: { display: "block", width: props.width + "px", height: props.height + "px" } });
   }
 
   // ─── File List Component ──────────────────────────────────────
@@ -336,7 +370,7 @@
           ),
           h("div", { className: "synapse-file-footer" },
             h("span", { className: "synapse-eta" },
-              f.state === "processing" ? "ETA " + fmtEta(f.eta_seconds) :
+              f.state === "processing" ? (f.segments_done || 0) + "/" + (f.segments_total || 0) + " seg" + (f.eta_seconds ? " | " + fmtEta(f.eta_seconds) : "") :
               f.state === "complete" ? "Complete" : "Queued"),
             h("span", { className: "synapse-progress-pct" }, pct + "%"),
           ),
