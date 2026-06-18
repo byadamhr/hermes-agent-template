@@ -355,11 +355,25 @@
   function FileListPanel(props) {
     var files = props.files || [];
     if (!files.length) return null;
+
+    // Sort: processing first, then queued, then complete at bottom
+    var stateOrder = { processing: 0, queued: 1, complete: 2 };
+    var sorted = files.slice().sort(function (a, b) {
+      var sa = stateOrder[a.state] !== undefined ? stateOrder[a.state] : 1;
+      var sb = stateOrder[b.state] !== undefined ? stateOrder[b.state] : 1;
+      return sa - sb;
+    });
+
     return h("div", { className: "synapse-filelist" },
       h("div", { className: "synapse-filelist-title" }, "Files"),
-      files.map(function (f) {
+      sorted.map(function (f) {
         var pct = Math.round((f.progress || 0) * 100);
-        return h("div", { key: f.id, className: "synapse-file" + (f.state ? " " + f.state : "") },
+        var isComplete = f.state === "complete";
+        return h("div", {
+          key: f.id,
+          className: "synapse-file" + (f.state ? " " + f.state : "") + (isComplete ? " faded" : ""),
+          style: isComplete ? { opacity: 0.5 } : {},
+        },
           h("div", { className: "synapse-file-header" },
             h("span", { className: "synapse-file-name", title: f.label }, f.label),
             h("span", { className: "synapse-file-status" + (f.state ? " " + f.state : "") },

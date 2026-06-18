@@ -168,7 +168,7 @@
   border-radius: 6px;
   padding: 8px 10px;
   background: rgba(20, 24, 31, 0.5);
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s, background 0.2s, opacity 0.5s;
   cursor: default;
 }
 
