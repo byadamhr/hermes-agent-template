@@ -169,6 +169,16 @@
   color: #fff;
 }
 
+.hermes-batch-btn.active {
+  background: var(--color-primary, #6366f1);
+  border-color: var(--color-primary, #6366f1);
+  color: #fff;
+}
+
+.hermes-batch-btn.active:hover {
+  background: color-mix(in srgb, var(--color-primary, #6366f1) 80%, #fff);
+}
+
 /* ---- Checkbox ---- */
 
 .hermes-checkbox {
