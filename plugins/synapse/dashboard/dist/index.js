@@ -287,7 +287,33 @@
       // Track last known state for incremental updates
       var lastStateHash = JSON.stringify(data);
 
-      function frame() {
+      // 30fps cap + pause when hidden
+      var FRAME_INTERVAL = 1000 / 30; // 30fps
+      var lastFrameTime = 0;
+      var paused = false;
+
+      function onVisibility() {
+        paused = document.hidden;
+        if (!paused) {
+          lastFrameTime = performance.now();
+          sim.lastTime = performance.now() / 1000;
+          animRef.current = requestAnimationFrame(frame);
+        }
+      }
+      document.addEventListener("visibilitychange", onVisibility);
+
+      function frame(timestamp) {
+        animRef.current = null;
+        if (paused) return;
+
+        // 30fps cap — skip frame if too soon
+        var elapsed = timestamp - lastFrameTime;
+        if (elapsed < FRAME_INTERVAL) {
+          animRef.current = requestAnimationFrame(frame);
+          return;
+        }
+        lastFrameTime = timestamp - (elapsed % FRAME_INTERVAL);
+
         var now = performance.now() / 1000;
         var rawDt = Math.min(now - sim.lastTime, 0.1);
         sim.lastTime = now;
@@ -345,7 +371,10 @@
         animRef.current = requestAnimationFrame(frame);
       }
       animRef.current = requestAnimationFrame(frame);
-      return function () { if (animRef.current) cancelAnimationFrame(animRef.current); };
+      return function () {
+        document.removeEventListener("visibilitychange", onVisibility);
+        if (animRef.current) cancelAnimationFrame(animRef.current);
+      };
     }, [props.width, props.height]); // Only recreate on resize, NOT on stateData change
 
     return h("canvas", { ref: canvasRef, style: { display: "block", width: props.width + "px", height: props.height + "px" } });
