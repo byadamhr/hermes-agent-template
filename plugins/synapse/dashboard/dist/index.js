@@ -251,7 +251,10 @@
   }
 
   // ─── Canvas Renderer ──────────────────────────────────────────
-  function SynapseCanvas(stateData, width, height) {
+  function SynapseCanvas(props) {
+    var stateData = props.stateData;
+    var width = props.width;
+    var height = props.height;
     var canvasRef = useRef(null);
     var animRef = useRef(null);
     var simRef = useRef({ nodes: [], connections: [], pulses: [], simTime: 0, lastTime: 0, fps: 0, fpsFrames: 0, fpsTime: 0 });
@@ -503,7 +506,7 @@
       ? null
       : h("div", { ref: containerRef, className: "synapse-canvas-wrap" },
           stateData
-            ? SynapseCanvas(stateData, dims.w || 800, dims.h || 450)
+            ? h(SynapseCanvas, { stateData: stateData, width: dims.w || 800, height: dims.h || 450 })
             : h("div", { className: "synapse-loading" }, "Loading..."),
         );
 

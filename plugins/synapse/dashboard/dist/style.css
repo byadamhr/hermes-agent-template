@@ -3,10 +3,11 @@
 .synapse-plugin {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  min-height: 70vh;
   background: #0a0e1a;
   color: #8892b0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  border-radius: 8px;
   overflow: hidden;
 }
 
@@ -124,7 +125,7 @@
 /* ── Canvas area ──────────────────────────────────────────────── */
 .synapse-canvas-wrap {
   flex: 1;
-  min-height: 0;
+  min-height: 450px;
   overflow: hidden;
   position: relative;
 }
