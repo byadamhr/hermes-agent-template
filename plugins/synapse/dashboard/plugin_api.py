@@ -158,19 +158,3 @@ def get_demo_state():
         "stats": stats,
         "last_update": time.time(),
     })
-
-
-# -------------------------------------------------------------------
-# Standalone full-screen page (for secondary monitor)
-# -------------------------------------------------------------------
-
-_STANDALONE_HTML = (Path(__file__).parent / "standalone.html").resolve()
-
-
-@router.get("/standalone")
-def serve_standalone():
-    """Serve the standalone full-screen synapse visualization."""
-    if not _STANDALONE_HTML.exists():
-        raise HTTPException(status_code=404, detail="Standalone page not found")
-    from fastapi.responses import HTMLResponse
-    return HTMLResponse(_STANDALONE_HTML.read_text(encoding="utf-8"))

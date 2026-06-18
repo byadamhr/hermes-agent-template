@@ -409,14 +409,6 @@
         h("button", { className: "synapse-mode-btn" + (mode === "live" ? " active" : ""), onClick: function () { setMode("live"); } }, "Live"),
       ),
       h("div", { className: "synapse-toolbar-right" },
-        h("button", {
-          className: "synapse-btn synapse-btn-open",
-          onClick: function () {
-            var token = window.__HERMES_SESSION_TOKEN__ || "";
-            window.open("/api/plugins/synapse/standalone?token=" + encodeURIComponent(token), "_blank");
-          },
-          title: "Open full-screen in new tab (secondary monitor)",
-        }, "\u2922"),
         h("button", { className: "synapse-btn", onClick: function () { setMinimized(!minimized); }, title: minimized ? "Expand" : "Minimize" }, minimized ? "\u25A1" : "\u2013"),
         h("button", { className: "synapse-btn synapse-btn-close", onClick: function () { setClosed(true); }, title: "Close" }, "\u2715"),
       ),
