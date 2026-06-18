@@ -103,8 +103,9 @@ function renderFileList(files){
   });
 }
 
+var API_TOKEN=(function(){var m=location.search.match(/token=([^&]+)/);return m?decodeURIComponent(m[1]):""})();
 function fetchState(){
-  fetch("/api/plugins/synapse/demo").then(function(r){return r.json()}).then(applyState).catch(function(e){console.error(e)})
+  fetch("/api/plugins/synapse/demo",{headers:{"X-Hermes-Session-Token":API_TOKEN}}).then(function(r){return r.json()}).then(applyState).catch(function(e){console.error(e)})
 }
 fetchState();setInterval(fetchState,3000);
 
