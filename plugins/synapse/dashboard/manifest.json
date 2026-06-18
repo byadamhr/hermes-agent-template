@@ -1,0 +1,12 @@
+{
+  "name": "synapse",
+  "label": "Synapse Monitor",
+  "description": "Real-time neuronal synapse visualization of active tasks, agents, and file processing",
+  "icon": "Brain",
+  "version": "1.0.0",
+  "tab": { "path": "/synapse", "position": "after:skills" },
+  "slots": [],
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

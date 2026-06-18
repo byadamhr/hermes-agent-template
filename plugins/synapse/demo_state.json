@@ -1,0 +1,31 @@
+{
+  "agents": [
+    {"id": "orchestrator", "label": "Orchestrator", "state": "active"},
+    {"id": "worker-1", "label": "Worker-1", "state": "active"},
+    {"id": "worker-2", "label": "Worker-2", "state": "active"},
+    {"id": "worker-3", "label": "Worker-3", "state": "idle"},
+    {"id": "worker-4", "label": "Worker-4", "state": "idle"}
+  ],
+  "files": [
+    {"id": "f1", "label": "GB_T_4501.docx", "state": "processing", "agent": "worker-1"},
+    {"id": "f2", "label": "GB_T_4502.docx", "state": "processing", "agent": "worker-1"},
+    {"id": "f3", "label": "GB_T_4503.docx", "state": "processing", "agent": "worker-2"},
+    {"id": "f4", "label": "GB_T_4504.docx", "state": "queued"},
+    {"id": "f5", "label": "GB_T_4505.docx", "state": "queued"},
+    {"id": "f6", "label": "GB_T_4506.docx", "state": "complete"},
+    {"id": "f7", "label": "GB_T_4507.docx", "state": "complete"},
+    {"id": "f8", "label": "GB_T_4508.docx", "state": "queued"}
+  ],
+  "pulses": [
+    {"from": "worker-1", "to": "f1", "active": true},
+    {"from": "worker-1", "to": "f2", "active": true},
+    {"from": "worker-2", "to": "f3", "active": true}
+  ],
+  "stats": {
+    "active_agents": 3,
+    "files_processing": 3,
+    "files_queued": 3,
+    "files_complete": 2
+  },
+  "last_update": 0
+}

@@ -1,0 +1,176 @@
+/* ─── Synapse Monitor Plugin Styles ───────────────────────────── */
+
+.synapse-plugin {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0a0e1a;
+  color: #8892b0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+}
+
+/* ── Toolbar ──────────────────────────────────────────────────── */
+.synapse-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(20, 24, 31, 0.95);
+  border-bottom: 1px solid rgba(100, 255, 218, 0.08);
+  flex-shrink: 0;
+}
+
+.synapse-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.synapse-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.synapse-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64ffda;
+  letter-spacing: 1px;
+}
+
+.synapse-mode-btn {
+  background: rgba(100, 255, 218, 0.06);
+  border: 1px solid rgba(100, 255, 218, 0.15);
+  color: #8892b0;
+  font-family: inherit;
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.synapse-mode-btn:hover {
+  background: rgba(100, 255, 218, 0.12);
+  color: #ccd6f6;
+}
+
+.synapse-mode-btn.active {
+  background: rgba(100, 255, 218, 0.15);
+  border-color: rgba(100, 255, 218, 0.4);
+  color: #64ffda;
+}
+
+.synapse-btn {
+  background: rgba(100, 255, 218, 0.06);
+  border: 1px solid rgba(100, 255, 218, 0.12);
+  color: #8892b0;
+  font-family: inherit;
+  font-size: 12px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 0;
+}
+
+.synapse-btn:hover {
+  background: rgba(100, 255, 218, 0.15);
+  color: #64ffda;
+}
+
+.synapse-btn-close:hover {
+  background: rgba(248, 81, 73, 0.2);
+  border-color: rgba(248, 81, 73, 0.4);
+  color: #f85149;
+}
+
+/* ── Stats bar ────────────────────────────────────────────────── */
+.synapse-stats {
+  display: flex;
+  gap: 16px;
+  padding: 8px 14px;
+  background: rgba(20, 24, 31, 0.7);
+  border-bottom: 1px solid rgba(100, 255, 218, 0.05);
+  flex-shrink: 0;
+}
+
+.synapse-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.synapse-stat-label {
+  color: #5a6580;
+}
+
+.synapse-stat-val {
+  color: #64ffda;
+  font-weight: 600;
+}
+
+.synapse-stat-processing { color: #ffb347; }
+.synapse-stat-queued { color: #6b7688; }
+.synapse-stat-complete { color: #45b764; }
+
+/* ── Canvas area ──────────────────────────────────────────────── */
+.synapse-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.synapse-canvas-wrap canvas {
+  display: block;
+}
+
+.synapse-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #5a6580;
+  font-size: 13px;
+}
+
+/* ── Closed state: floating reopen badge ──────────────────────── */
+.synapse-closed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(100, 255, 218, 0.08);
+  border: 1px solid rgba(100, 255, 218, 0.2);
+  border-radius: 20px;
+  color: #64ffda;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  margin: 20px;
+}
+
+.synapse-closed-badge:hover {
+  background: rgba(100, 255, 218, 0.15);
+  border-color: rgba(100, 255, 218, 0.4);
+  box-shadow: 0 0 12px rgba(100, 255, 218, 0.15);
+}
+
+.synapse-closed-icon {
+  font-size: 14px;
+}
+
+/* ── Minimized state: compact stats only ──────────────────────── */
+.synapse-plugin[data-minimized="true"] .synapse-canvas-wrap {
+  display: none;
+}
