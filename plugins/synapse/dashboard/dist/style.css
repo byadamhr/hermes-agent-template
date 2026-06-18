@@ -12,22 +12,6 @@
   overflow: hidden;
 }
 
-/* ── Pop-out mode ────────────────────────────────────────────── */
-.synapse-plugin.popped-out {
-  position: fixed;
-  top: 60px;
-  right: 20px;
-  width: 900px;
-  height: 620px;
-  min-height: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(100, 255, 218, 0.2);
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 20px rgba(100, 255, 218, 0.08);
-  z-index: 9999;
-  resize: both;
-  overflow: hidden;
-}
-
 /* ── Toolbar ─────────────────────────────────────────────────── */
 .synapse-toolbar {
   display: flex;
@@ -37,15 +21,6 @@
   background: rgba(20, 24, 31, 0.95);
   border-bottom: 1px solid rgba(100, 255, 218, 0.08);
   flex-shrink: 0;
-  cursor: default;
-}
-
-/* Drag handle when popped out */
-.synapse-plugin.popped-out .synapse-toolbar {
-  cursor: grab;
-}
-.synapse-plugin.popped-out .synapse-toolbar:active {
-  cursor: grabbing;
 }
 
 .synapse-toolbar-left {
@@ -112,7 +87,7 @@
   color: #64ffda;
 }
 
-.synapse-btn-popout:hover {
+.synapse-btn-open:hover {
   background: rgba(100, 255, 218, 0.2);
   color: #64ffda;
 }

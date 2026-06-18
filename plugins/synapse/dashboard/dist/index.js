@@ -127,12 +127,12 @@
     var mx = (ax + bx) / 2, my = (ay + by) / 2;
     var dx = bx - ax, dy = by - ay;
     var offset = Math.sin(simT * 0.5 + ax * 0.01) * 12;
-    var cx = mx + dy * offset * 0.01;
-    var cy = my - dx * offset * 0.01;
+    var cx2 = mx + dy * offset * 0.01;
+    var cy2 = my - dx * offset * 0.01;
     var u = 1 - t;
     return {
-      x: u * u * ax + 2 * u * t * cx + t * t * bx,
-      y: u * u * ay + 2 * u * t * cy + t * t * by,
+      x: u * u * ax + 2 * u * t * cx2 + t * t * bx,
+      y: u * u * ay + 2 * u * t * cy2 + t * t * by,
     };
   }
 
@@ -227,9 +227,7 @@
 
     var connections = [];
     agentOnly.forEach(function (a) {
-      if (nodeMap[a.id]) {
-        connections.push(makeConnection(orch, nodeMap[a.id]));
-      }
+      if (nodeMap[a.id]) connections.push(makeConnection(orch, nodeMap[a.id]));
     });
     files.forEach(function (f) {
       if (f.agent && nodeMap[f.agent] && nodeMap[f.id]) {
@@ -274,13 +272,8 @@
         var fromNode = layout.nodeMap[p.from];
         var toNode = layout.nodeMap[p.to];
         if (fromNode && toNode) {
-          var conn = sim.connections.find(function (c) {
-            return c.from.id === p.from && c.to.id === p.to;
-          });
-          if (!conn) {
-            conn = makeConnection(fromNode, toNode);
-            sim.connections.push(conn);
-          }
+          var conn = sim.connections.find(function (c) { return c.from.id === p.from && c.to.id === p.to; });
+          if (!conn) { conn = makeConnection(fromNode, toNode); sim.connections.push(conn); }
           conn.activity = 1;
           sim.pulses.push(makePulse(conn));
         }
@@ -289,60 +282,26 @@
       function frame() {
         var now = performance.now() / 1000;
         var rawDt = Math.min(now - sim.lastTime, 0.1);
-        var dt = rawDt;
         sim.lastTime = now;
-        sim.simTime += dt;
+        sim.simTime += rawDt;
 
         sim.fpsFrames++;
         sim.fpsTime += rawDt;
-        if (sim.fpsTime >= 0.5) {
-          sim.fps = Math.round(sim.fpsFrames / sim.fpsTime);
-          sim.fpsFrames = 0;
-          sim.fpsTime = 0;
-        }
+        if (sim.fpsTime >= 0.5) { sim.fps = Math.round(sim.fpsFrames / sim.fpsTime); sim.fpsFrames = 0; sim.fpsTime = 0; }
 
-        for (var ci = 0; ci < sim.connections.length; ci++) {
-          var c = sim.connections[ci];
-          if (c.activity > 0) c.activity = Math.max(0, c.activity - dt * 0.5);
-        }
-
-        for (var pi = sim.pulses.length - 1; pi >= 0; pi--) {
-          updatePulse(sim.pulses[pi], dt, sim.simTime);
-          if (!sim.pulses[pi].alive) sim.pulses.splice(pi, 1);
-        }
-
-        if (Math.random() < 0.02) {
-          var activeConns = sim.connections.filter(function (c) { return c.activity > 0.3; });
-          if (activeConns.length) {
-            sim.pulses.push(makePulse(activeConns[Math.floor(Math.random() * activeConns.length)]));
-          }
-        }
-
-        for (var ni = 0; ni < sim.nodes.length; ni++) {
-          updateNode(sim.nodes[ni], sim.simTime, dt);
-        }
+        for (var ci = 0; ci < sim.connections.length; ci++) { if (sim.connections[ci].activity > 0) sim.connections[ci].activity = Math.max(0, sim.connections[ci].activity - rawDt * 0.5); }
+        for (var pi = sim.pulses.length - 1; pi >= 0; pi--) { updatePulse(sim.pulses[pi], rawDt, sim.simTime); if (!sim.pulses[pi].alive) sim.pulses.splice(pi, 1); }
+        if (Math.random() < 0.02) { var ac = sim.connections.filter(function (c) { return c.activity > 0.3; }); if (ac.length) sim.pulses.push(makePulse(ac[Math.floor(Math.random() * ac.length)])); }
+        for (var ni = 0; ni < sim.nodes.length; ni++) updateNode(sim.nodes[ni], sim.simTime, rawDt);
 
         ctx.fillStyle = "rgba(10,14,26,0.25)";
         ctx.fillRect(0, 0, width, height);
-
-        ctx.strokeStyle = "rgba(100,255,218,0.015)";
-        ctx.lineWidth = 0.5;
-        for (var gx = 0; gx < width; gx += 50) {
-          ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke();
-        }
-        for (var gy = 0; gy < height; gy += 50) {
-          ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke();
-        }
-
-        for (var ci2 = 0; ci2 < sim.connections.length; ci2++) {
-          drawConnection(ctx, sim.connections[ci2], sim.simTime);
-        }
-        for (var pi2 = 0; pi2 < sim.pulses.length; pi2++) {
-          drawPulse(ctx, sim.pulses[pi2], sim.simTime);
-        }
-        for (var ni2 = 0; ni2 < sim.nodes.length; ni2++) {
-          drawNode(ctx, sim.nodes[ni2], sim.simTime);
-        }
+        ctx.strokeStyle = "rgba(100,255,218,0.015)"; ctx.lineWidth = 0.5;
+        for (var gx = 0; gx < width; gx += 50) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke(); }
+        for (var gy = 0; gy < height; gy += 50) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke(); }
+        for (var ci2 = 0; ci2 < sim.connections.length; ci2++) drawConnection(ctx, sim.connections[ci2], sim.simTime);
+        for (var pi2 = 0; pi2 < sim.pulses.length; pi2++) drawPulse(ctx, sim.pulses[pi2], sim.simTime);
+        for (var ni2 = 0; ni2 < sim.nodes.length; ni2++) drawNode(ctx, sim.nodes[ni2], sim.simTime);
 
         ctx.fillStyle = "rgba(100,255,218,0.5)";
         ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
@@ -351,46 +310,34 @@
 
         animRef.current = requestAnimationFrame(frame);
       }
-
       animRef.current = requestAnimationFrame(frame);
       return function () { if (animRef.current) cancelAnimationFrame(animRef.current); };
     }, [stateData, width, height]);
 
-    return h("canvas", {
-      ref: canvasRef,
-      style: { display: "block", width: width + "px", height: height + "px" },
-    });
+    return h("canvas", { ref: canvasRef, style: { display: "block", width: width + "px", height: height + "px" } });
   }
 
   // ─── File List Component ──────────────────────────────────────
   function FileListPanel(props) {
     var files = props.files || [];
     if (!files.length) return null;
-
     return h("div", { className: "synapse-filelist" },
       h("div", { className: "synapse-filelist-title" }, "Files"),
       files.map(function (f) {
         var pct = Math.round((f.progress || 0) * 100);
-        var cls = "synapse-file" + (f.state ? " " + f.state : "");
-        return h("div", { key: f.id, className: cls },
+        return h("div", { key: f.id, className: "synapse-file" + (f.state ? " " + f.state : "") },
           h("div", { className: "synapse-file-header" },
             h("span", { className: "synapse-file-name", title: f.label }, f.label),
             h("span", { className: "synapse-file-status" + (f.state ? " " + f.state : "") },
-              f.state === "processing" ? "ACTIVE" : f.state === "complete" ? "DONE" : "WAIT"
-            ),
+              f.state === "processing" ? "ACTIVE" : f.state === "complete" ? "DONE" : "WAIT"),
           ),
           h("div", { className: "synapse-progress-track" },
-            h("div", {
-              className: "synapse-progress-fill" + (f.state ? " " + f.state : ""),
-              style: { width: pct + "%" },
-            }),
+            h("div", { className: "synapse-progress-fill" + (f.state ? " " + f.state : ""), style: { width: pct + "%" } }),
           ),
           h("div", { className: "synapse-file-footer" },
             h("span", { className: "synapse-eta" },
               f.state === "processing" ? "ETA " + fmtEta(f.eta_seconds) :
-              f.state === "complete" ? "Complete" :
-              f.state === "queued" ? "Queued" : "\u2014"
-            ),
+              f.state === "complete" ? "Complete" : "Queued"),
             h("span", { className: "synapse-progress-pct" }, pct + "%"),
           ),
         );
@@ -408,20 +355,12 @@
     var closed = _s3[0]; var setClosed = _s3[1];
     var _s4 = useState("demo");
     var mode = _s4[0]; var setMode = _s4[1];
-    var _s5 = useState(0);
-    var refreshCounter = _s5[0]; var setRefreshCounter = _s5[1];
-    var _s6 = useState(false);
-    var poppedOut = _s6[0]; var setPoppedOut = _s6[1];
-    var _s7 = useState({ w: 660, h: 450 });
-    var dims = _s7[0]; var setDims = _s7[1];
+    var _s5 = useState({ w: 660, h: 450 });
+    var dims = _s5[0]; var setDims = _s5[1];
     var containerRef = useRef(null);
-    var dragRef = useRef({ dragging: false, startX: 0, startY: 0 });
 
-    // Fetch state
     var fetchState = useCallback(function () {
-      var url = mode === "demo"
-        ? "/api/plugins/synapse/demo"
-        : "/api/plugins/synapse/status";
+      var url = mode === "demo" ? "/api/plugins/synapse/demo" : "/api/plugins/synapse/status";
       SDK.fetchJSON(url)
         .then(function (data) { setStateData(data); })
         .catch(function (e) { console.error("Synapse fetch error:", e); });
@@ -434,52 +373,20 @@
       return function () { clearInterval(interval); };
     }, [fetchState, closed]);
 
-    // Track container size
     useEffect(function () {
       if (closed || !containerRef.current) return;
       var ro = new ResizeObserver(function (entries) {
         for (var i = 0; i < entries.length; i++) {
           var rect = entries[i].contentRect;
-          if (rect.width > 100 && rect.height > 100) {
-            setDims({ w: Math.floor(rect.width), h: Math.floor(rect.height) });
-          }
+          if (rect.width > 100 && rect.height > 100) setDims({ w: Math.floor(rect.width), h: Math.floor(rect.height) });
         }
       });
       ro.observe(containerRef.current);
       return function () { ro.disconnect(); };
-    }, [closed, poppedOut]);
+    }, [closed]);
 
-    // Drag handlers (for pop-out mode)
-    var onDragStart = useCallback(function (e) {
-      if (!poppedOut) return;
-      dragRef.current = { dragging: true, startX: e.clientX, startY: e.clientY };
-      var onMove = function (ev) {
-        if (!dragRef.current.dragging) return;
-        var el = containerRef.current;
-        if (!el) return;
-        var dx = ev.clientX - dragRef.current.startX;
-        var dy = ev.clientY - dragRef.current.startY;
-        dragRef.current.startX = ev.clientX;
-        dragRef.current.startY = ev.clientY;
-        el.style.left = (el.offsetLeft + dx) + "px";
-        el.style.top = (el.offsetTop + dy) + "px";
-        el.style.right = "auto";
-      };
-      var onUp = function () {
-        dragRef.current.dragging = false;
-        document.removeEventListener("mousemove", onMove);
-        document.removeEventListener("mouseup", onUp);
-      };
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp);
-    }, [poppedOut]);
+    var handleReopen = useCallback(function () { setClosed(false); }, []);
 
-    var handleReopen = useCallback(function () {
-      setClosed(false);
-      setRefreshCounter(function (c) { return c + 1; });
-    }, []);
-
-    // ── Closed state ──
     if (closed) {
       return h("div", { className: "synapse-closed-badge", onClick: handleReopen },
         h("span", { className: "synapse-closed-icon" }, "\u2B21"),
@@ -487,85 +394,42 @@
       );
     }
 
-    // ── Stats ──
     var stats = (stateData && stateData.stats) || {};
     var statsBar = h("div", { className: "synapse-stats" },
-      h("div", { className: "synapse-stat" },
-        h("span", { className: "synapse-stat-label" }, "Agents"),
-        h("span", { className: "synapse-stat-val" }, stats.active_agents || 0),
-      ),
-      h("div", { className: "synapse-stat" },
-        h("span", { className: "synapse-stat-label" }, "Processing"),
-        h("span", { className: "synapse-stat-val synapse-stat-processing" }, stats.files_processing || 0),
-      ),
-      h("div", { className: "synapse-stat" },
-        h("span", { className: "synapse-stat-label" }, "Queued"),
-        h("span", { className: "synapse-stat-val synapse-stat-queued" }, stats.files_queued || 0),
-      ),
-      h("div", { className: "synapse-stat" },
-        h("span", { className: "synapse-stat-label" }, "Complete"),
-        h("span", { className: "synapse-stat-val synapse-stat-complete" }, stats.files_complete || 0),
-      ),
+      h("div", { className: "synapse-stat" }, h("span", { className: "synapse-stat-label" }, "Agents"), h("span", { className: "synapse-stat-val" }, stats.active_agents || 0)),
+      h("div", { className: "synapse-stat" }, h("span", { className: "synapse-stat-label" }, "Processing"), h("span", { className: "synapse-stat-val synapse-stat-processing" }, stats.files_processing || 0)),
+      h("div", { className: "synapse-stat" }, h("span", { className: "synapse-stat-label" }, "Queued"), h("span", { className: "synapse-stat-val synapse-stat-queued" }, stats.files_queued || 0)),
+      h("div", { className: "synapse-stat" }, h("span", { className: "synapse-stat-label" }, "Complete"), h("span", { className: "synapse-stat-val synapse-stat-complete" }, stats.files_complete || 0)),
     );
 
-    // ── Toolbar ──
-    var toolbar = h("div", {
-      className: "synapse-toolbar",
-      onMouseDown: poppedOut ? onDragStart : undefined,
-    },
+    var toolbar = h("div", { className: "synapse-toolbar" },
       h("div", { className: "synapse-toolbar-left" },
         h("span", { className: "synapse-title" }, "\u2B21 Synapse Monitor"),
-        h("button", {
-          className: "synapse-mode-btn" + (mode === "demo" ? " active" : ""),
-          onClick: function () { setMode("demo"); },
-        }, "Demo"),
-        h("button", {
-          className: "synapse-mode-btn" + (mode === "live" ? " active" : ""),
-          onClick: function () { setMode("live"); },
-        }, "Live"),
+        h("button", { className: "synapse-mode-btn" + (mode === "demo" ? " active" : ""), onClick: function () { setMode("demo"); } }, "Demo"),
+        h("button", { className: "synapse-mode-btn" + (mode === "live" ? " active" : ""), onClick: function () { setMode("live"); } }, "Live"),
       ),
       h("div", { className: "synapse-toolbar-right" },
         h("button", {
-          className: "synapse-btn synapse-btn-popout",
-          onClick: function () { setPoppedOut(!poppedOut); },
-          title: poppedOut ? "Dock back" : "Pop out (float on top)",
-        }, poppedOut ? "\u21A4" : "\u2B1A"),
-        h("button", {
-          className: "synapse-btn",
-          onClick: function () { setMinimized(!minimized); },
-          title: minimized ? "Expand" : "Minimize",
-        }, minimized ? "\u25A1" : "\u2013"),
-        h("button", {
-          className: "synapse-btn synapse-btn-close",
-          onClick: function () { setClosed(true); },
-          title: "Close",
-        }, "\u2715"),
+          className: "synapse-btn synapse-btn-open",
+          onClick: function () { window.open("/api/plugins/synapse/standalone", "_blank"); },
+          title: "Open full-screen in new tab (secondary monitor)",
+        }, "\u2922"),
+        h("button", { className: "synapse-btn", onClick: function () { setMinimized(!minimized); }, title: minimized ? "Expand" : "Minimize" }, minimized ? "\u25A1" : "\u2013"),
+        h("button", { className: "synapse-btn synapse-btn-close", onClick: function () { setClosed(true); }, title: "Close" }, "\u2715"),
       ),
     );
 
-    // ── Canvas ──
-    var canvasArea = minimized
-      ? null
+    var canvasArea = minimized ? null
       : h("div", { ref: containerRef, className: "synapse-canvas-wrap" },
-          stateData
-            ? h(SynapseCanvas, { stateData: stateData, width: dims.w, height: dims.h })
-            : h("div", { className: "synapse-loading" }, "Loading..."),
-        );
+          stateData ? h(SynapseCanvas, { stateData: stateData, width: dims.w, height: dims.h })
+                    : h("div", { className: "synapse-loading" }, "Loading..."));
 
-    // ── File list ──
-    var fileList = minimized
-      ? null
+    var fileList = minimized ? null
       : h(FileListPanel, { files: (stateData && stateData.files) || [] });
 
-    var pluginCls = "synapse-plugin" + (poppedOut ? " popped-out" : "");
-
-    return h("div", { className: pluginCls },
-      toolbar,
-      statsBar,
-      h("div", { className: "synapse-body" },
-        fileList,
-        canvasArea,
-      ),
+    return h("div", { className: "synapse-plugin" },
+      toolbar, statsBar,
+      h("div", { className: "synapse-body" }, fileList, canvasArea),
     );
   }
 
