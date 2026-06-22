@@ -16,7 +16,7 @@ if [ ! -f "$HONCHO_PGDATA/PG_VERSION" ]; then
   echo "=== Initializing PostgreSQL for Honcho ==="
   mkdir -p "$HONCHO_PGDATA"
   chown postgres:postgres "$HONCHO_PGDATA"
-  su - postgres -c "$PG_BIN/initdb -D '$HONCHO_PGDATA' --auth=trust"
+  su - postgres -c "$PG_BIN/initdb -D '$HONCHO_PGDATA' --auth=trust --encoding=UTF8 --locale=C"
   # Allow local connections without password (trust auth)
   echo "local all all trust" > "$HONCHO_PGDATA/pg_hba.conf"
   echo "host all all 127.0.0.1/32 trust" >> "$HONCHO_PGDATA/pg_hba.conf"
@@ -40,7 +40,7 @@ fi
 su - postgres -c "$PG_BIN/psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='$HONCHO_DB_USER'\"" | grep -q 1 || \
   su - postgres -c "$PG_BIN/psql -c \"CREATE USER $HONCHO_DB_USER WITH PASSWORD '$HONCHO_DB_PASS';\""
 su - postgres -c "$PG_BIN/psql -tc \"SELECT 1 FROM pg_database WHERE datname='$HONCHO_DB_NAME'\"" | grep -q 1 || \
-  su - postgres -c "$PG_BIN/psql -c \"CREATE DATABASE $HONCHO_DB_NAME OWNER $HONCHO_DB_USER;\""
+  su - postgres -c "$PG_BIN/psql -c \"CREATE DATABASE $HONCHO_DB_NAME OWNER $HONCHO_DB_USER ENCODING 'UTF8' LC_COLLATE='C' LC_CTYPE='C' TEMPLATE=template0;\""
 # Enable pgvector extension
 su - postgres -c "$PG_BIN/psql -d $HONCHO_DB_NAME -c 'CREATE EXTENSION IF NOT EXISTS vector;'" 2>/dev/null || true
 
@@ -75,7 +75,7 @@ HONCHO_EOF
 fi
 
 # ─── Honcho server environment ─────────────────────────────────────────────
-export HONCHO_DB_URI="postgresql+psycopg://$HONCHO_DB_USER:$HONCHO_DB_PASS@localhost:5432/$HONCHO_DB_NAME"
+export HONCHO_DB_URI="postgresql+psycopg://$HONCHO_DB_USER:$HONCHO_DB_PASS@localhost:5432/$HONCHO_DB_NAME?options=-c%20client_encoding%3DUTF8"
 export HONCHO_BASE_URL="http://127.0.0.1:8000"
 
 # LLM keys for Honcho's background processing (deriver, summary, dialectic)
@@ -84,26 +84,18 @@ export HONCHO_BASE_URL="http://127.0.0.1:8000"
 # For OpenRouter-backed models, set the base_url in honcho.json overrides
 [ -f /data/.hermes/.env ] && set -a && . /data/.hermes/.env && set +a
 
-# Patch SQLAlchemy to handle bytes from pg_catalog.version() (psycopg3 issue).
-# /opt/honcho/ is rebuilt on every deploy, so this must be re-applied each boot.
-SA_DIALECT="/opt/honcho/.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py"
-if [ -f "$SA_DIALECT" ] && ! grep -q "honcho_bytes_patch" "$SA_DIALECT" 2>/dev/null; then
-  sed -i '/v = connection.exec_driver_sql.*pg_catalog.version.*scalar/a\        # honcho_bytes_patch: psycopg3 may return bytes instead of str\n        if isinstance(v, bytes): v = v.decode()' "$SA_DIALECT" 2>/dev/null || true
-  find /opt/honcho -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-fi
-
 # Start Honcho API server in background
 if [ -d /opt/honcho/.venv ] && [ -f /opt/honcho/src/main.py ]; then
+  # Run database migrations FIRST (server crashes without them)
+  echo "=== Running Honcho database migrations ==="
+  cd /opt/honcho && /opt/honcho/.venv/bin/python scripts/provision_db.py 2>&1 || \
+    echo "WARNING: Honcho migration failed"
+
   echo "=== Starting Honcho API server ==="
   /opt/honcho/.venv/bin/fastapi run --host 127.0.0.1 --port 8000 /opt/honcho/src/main.py \
     > /data/.hermes/logs/honcho-api.log 2>&1 &
   HONCHO_API_PID=$!
   echo "Honcho API PID: $HONCHO_API_PID"
-
-  # Run database migrations
-  echo "=== Running Honcho database migrations ==="
-  cd /opt/honcho && /opt/honcho/.venv/bin/python scripts/provision_db.py 2>&1 || \
-    echo "WARNING: Honcho migration failed (may be first boot, retrying after API starts)"
 
   # Start deriver worker in background
   echo "=== Starting Honcho deriver worker ==="
