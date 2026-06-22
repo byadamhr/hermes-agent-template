@@ -9,13 +9,14 @@ HONCHO_PGDATA="/data/honcho-db"
 HONCHO_DB_USER="honcho"
 HONCHO_DB_PASS="honcho"
 HONCHO_DB_NAME="honcho"
+PG_BIN="/usr/lib/postgresql/15/bin"
+export PGDATA="$HONCHO_PGDATA"
 
 if [ ! -f "$HONCHO_PGDATA/PG_VERSION" ]; then
   echo "=== Initializing PostgreSQL for Honcho ==="
   mkdir -p "$HONCHO_PGDATA"
   chown postgres:postgres "$HONCHO_PGDATA"
-  # Run initdb as the postgres system user
-  su - postgres -c "/usr/lib/postgresql/15/bin/initdb -D '$HONCHO_PGDATA' --auth=trust"
+  su - postgres -c "$PG_BIN/initdb -D '$HONCHO_PGDATA' --auth=trust"
   # Allow local connections without password (trust auth)
   echo "local all all trust" > "$HONCHO_PGDATA/pg_hba.conf"
   echo "host all all 127.0.0.1/32 trust" >> "$HONCHO_PGDATA/pg_hba.conf"
@@ -23,12 +24,11 @@ if [ ! -f "$HONCHO_PGDATA/PG_VERSION" ]; then
 fi
 
 # Start PostgreSQL (always, even if already running from a previous boot)
-if ! su - postgres -c "/usr/lib/postgresql/15/bin/pg_isready -D '$HONCHO_PGDATA'" >/dev/null 2>&1; then
+if ! su - postgres -c "$PG_BIN/pg_isready" >/dev/null 2>&1; then
   echo "=== Starting PostgreSQL ==="
-  su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D '$HONCHO_PGDATA' -l '$HONCHO_PGDATA/pg.log' start -w"
-  # Wait for ready
+  su - postgres -c "$PG_BIN/pg_ctl -D '$HONCHO_PGDATA' -l '$HONCHO_PGDATA/pg.log' start -w"
   for i in $(seq 1 30); do
-    if su - postgres -c "/usr/lib/postgresql/15/bin/pg_isready -D '$HONCHO_PGDATA'" >/dev/null 2>&1; then
+    if su - postgres -c "$PG_BIN/pg_isready" >/dev/null 2>&1; then
       echo "=== PostgreSQL ready ==="
       break
     fi
@@ -37,12 +37,12 @@ if ! su - postgres -c "/usr/lib/postgresql/15/bin/pg_isready -D '$HONCHO_PGDATA'
 fi
 
 # Create Honcho database and user if they don't exist
-su - postgres -c "/usr/lib/postgresql/15/bin/psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='$HONCHO_DB_USER'\" -D '$HONCHO_PGDATA'" | grep -q 1 || \
-  su - postgres -c "/usr/lib/postgresql/15/bin/psql -c \"CREATE USER $HONCHO_DB_USER WITH PASSWORD '$HONCHO_DB_PASS';\" -D '$HONCHO_PGDATA'"
-su - postgres -c "/usr/lib/postgresql/15/bin/psql -tc \"SELECT 1 FROM pg_database WHERE datname='$HONCHO_DB_NAME'\" -D '$HONCHO_PGDATA'" | grep -q 1 || \
-  su - postgres -c "/usr/lib/postgresql/15/bin/psql -c \"CREATE DATABASE $HONCHO_DB_NAME OWNER $HONCHO_DB_USER;\" -D '$HONCHO_PGDATA'"
+su - postgres -c "$PG_BIN/psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='$HONCHO_DB_USER'\"" | grep -q 1 || \
+  su - postgres -c "$PG_BIN/psql -c \"CREATE USER $HONCHO_DB_USER WITH PASSWORD '$HONCHO_DB_PASS';\""
+su - postgres -c "$PG_BIN/psql -tc \"SELECT 1 FROM pg_database WHERE datname='$HONCHO_DB_NAME'\"" | grep -q 1 || \
+  su - postgres -c "$PG_BIN/psql -c \"CREATE DATABASE $HONCHO_DB_NAME OWNER $HONCHO_DB_USER;\""
 # Enable pgvector extension
-su - postgres -c "/usr/lib/postgresql/15/bin/psql -d $HONCHO_DB_NAME -c 'CREATE EXTENSION IF NOT EXISTS vector;' -D '$HONCHO_PGDATA'" 2>/dev/null || true
+su - postgres -c "$PG_BIN/psql -d $HONCHO_DB_NAME -c 'CREATE EXTENSION IF NOT EXISTS vector;'" 2>/dev/null || true
 
 # ─── Honcho configuration ──────────────────────────────────────────────────
 HONCHO_CONFIG="/data/.hermes/honcho.json"
