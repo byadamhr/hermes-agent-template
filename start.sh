@@ -79,10 +79,58 @@ export DB_CONNECTION_URI="postgresql+psycopg://$HONCHO_DB_USER:$HONCHO_DB_PASS@l
 export HONCHO_BASE_URL="http://127.0.0.1:8000"
 
 # LLM keys for Honcho's background processing (deriver, summary, dialectic)
-# These should be set in /data/.hermes/.env or Railway environment variables
-# Honcho reads from its own env vars: LLM_GEMINI_API_KEY, LLM_ANTHROPIC_API_KEY, LLM_OPENAI_API_KEY
-# For OpenRouter-backed models, set the base_url in honcho.json overrides
-[ -f /data/.hermes/.env ] && set -a && . /data/.hermes/.env && set +a
+# Reads OpenRouter key from auth.json credential pool (label: "honcho")
+OR_KEY=$(python3 -c "
+import json
+with open('/data/.hermes/auth.json') as f:
+    data = json.load(f)
+for c in data.get('credential_pool', {}).get('openrouter', []):
+    if c.get('label') == 'honcho':
+        print(c.get('access_token', ''))
+        break
+" 2>/dev/null)
+
+if [ -n "$OR_KEY" ]; then
+  # Global LLM key (used as fallback)
+  export LLM_OPENAI_API_KEY="$OR_KEY"
+
+  OR_BASE="https://openrouter.ai/api/v1"
+  MIMO_MODEL="xiaomi/mimo-v2.5"
+
+  # Deriver: builds representations and conclusions from messages
+  export DERIVER_MODEL_CONFIG__TRANSPORT="openai"
+  export DERIVER_MODEL_CONFIG__MODEL="$MIMO_MODEL"
+  export DERIVER_MODEL_CONFIG__OVERRIDES__BASE_URL="$OR_BASE"
+
+  # Embedding: vector search (needs embedding model, not MiMo)
+  export EMBEDDING_MODEL_CONFIG__TRANSPORT="openai"
+  export EMBEDDING_MODEL_CONFIG__MODEL="text-embedding-3-small"
+  export EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL="$OR_BASE"
+
+  # Dialectic reasoning levels: all use MiMo v2.5
+  for LEVEL in minimal low medium high max; do
+    export DIALECTIC_LEVELS__${LEVEL}__MODEL_CONFIG__TRANSPORT="openai"
+    export DIALECTIC_LEVELS__${LEVEL}__MODEL_CONFIG__MODEL="$MIMO_MODEL"
+    export DIALECTIC_LEVELS__${LEVEL}__MODEL_CONFIG__OVERRIDES__BASE_URL="$OR_BASE"
+  done
+
+  # Session summarization
+  export SUMMARY_MODEL_CONFIG__TRANSPORT="openai"
+  export SUMMARY_MODEL_CONFIG__MODEL="$MIMO_MODEL"
+  export SUMMARY_MODEL_CONFIG__OVERRIDES__BASE_URL="$OR_BASE"
+
+  # Dream (deep background processing)
+  export DREAM_DEDUCTION_MODEL_CONFIG__TRANSPORT="openai"
+  export DREAM_DEDUCTION_MODEL_CONFIG__MODEL="$MIMO_MODEL"
+  export DREAM_DEDUCTION_MODEL_CONFIG__OVERRIDES__BASE_URL="$OR_BASE"
+  export DREAM_INDUCTION_MODEL_CONFIG__TRANSPORT="openai"
+  export DREAM_INDUCTION_MODEL_CONFIG__MODEL="$MIMO_MODEL"
+  export DREAM_INDUCTION_MODEL_CONFIG__OVERRIDES__BASE_URL="$OR_BASE"
+
+  echo "=== Honcho LLM configured: MiMo v2.5 via OpenRouter ==="
+else
+  echo "=== WARNING: No OpenRouter key found for Honcho LLM ==="
+fi
 
 # Start Honcho API server in background
 if [ -d /opt/honcho/.venv ] && [ -f /opt/honcho/src/main.py ]; then
