@@ -83,7 +83,7 @@ RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/h
 # FastAPI server run from this venv.
 RUN git clone --depth 1 https://github.com/plastic-labs/honcho.git /opt/honcho && \
     cd /opt/honcho && \
-    uv sync --frozen --no-group dev && \
+    uv sync --frozen --no-group dev --python 3.12 && \
     rm -rf /opt/honcho/.git /opt/honcho/tests
 
 COPY requirements.txt /app/requirements.txt
