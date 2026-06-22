@@ -46,6 +46,22 @@
     return m + "m " + (s > 0 ? s + "s" : "");
   }
 
+  // ─── Cheap state hash (replaces JSON.stringify) ──────────────
+  function stateHash(data) {
+    if (!data) return "";
+    var parts = [];
+    var agents = data.agents || [];
+    for (var i = 0; i < agents.length; i++) {
+      parts.push(agents[i].id + ":" + agents[i].state);
+    }
+    var files = data.files || [];
+    for (var j = 0; j < files.length; j++) {
+      var f = files[j];
+      parts.push(f.id + ":" + f.state + ":" + (f.progress || 0) + ":" + (f.segments_done || 0));
+    }
+    return parts.join("|");
+  }
+
   // ─── Node ─────────────────────────────────────────────────────
   function makeNode(id, x, y, type, label, state, radius) {
     return {
@@ -62,33 +78,43 @@
   function updateNode(n, t, dt) {
     n.x = lerp(n.x, n.tx, 0.04);
     n.y = lerp(n.y, n.ty, 0.04);
-    var breathSpeed = n.state === "active" ? 3 : 1.2;
-    var breathAmp = n.state === "active" ? 0.15 : 0.06;
+    var isActive = n.state === "active" || n.state === "processing";
+    var breathSpeed = isActive ? 3 : 1.2;
+    var breathAmp = isActive ? 0.15 : 0.06;
     n.radius = n.baseRadius * (1 + Math.sin(t * breathSpeed + n.phase) * breathAmp);
-    var targetGlow = (n.state === "active" || n.state === "processing") ? 1 : 0.2;
+    var targetGlow = isActive ? 1 : 0.2;
     n.glowIntensity = lerp(n.glowIntensity, targetGlow, dt * 3);
   }
 
   function drawNode(ctx, n, t) {
-    var color = stateColor(n.state);
-    var glowR = n.radius * (3 + n.glowIntensity * 4);
-    var glow = ctx.createRadialGradient(n.x, n.y, n.radius * 0.5, n.x, n.y, glowR);
-    glow.addColorStop(0, hexToRgba(color, 0.3 * n.glowIntensity));
-    glow.addColorStop(0.5, hexToRgba(color, 0.08 * n.glowIntensity));
-    glow.addColorStop(1, hexToRgba(color, 0));
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
-    ctx.fill();
+    var color = n.id === "orchestrator" ? "#ffffff" : stateColor(n.state);
+    var isActive = n.state === "active" || n.state === "processing" || n.id === "orchestrator";
 
+    // Glow — only for active/processing nodes
+    if (n.glowIntensity > 0.3) {
+      var glowR = n.radius * (3 + n.glowIntensity * 4);
+      var glow = ctx.createRadialGradient(n.x, n.y, n.radius * 0.5, n.x, n.y, glowR);
+      glow.addColorStop(0, hexToRgba(color, 0.3 * n.glowIntensity));
+      glow.addColorStop(0.5, hexToRgba(color, 0.08 * n.glowIntensity));
+      glow.addColorStop(1, hexToRgba(color, 0));
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Main circle — shadow only for active
     ctx.fillStyle = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 12 * n.glowIntensity;
+    if (isActive) {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 12;
+    }
     ctx.beginPath();
     ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
 
+    // Highlight
     var hl = ctx.createRadialGradient(
       n.x - n.radius * 0.3, n.y - n.radius * 0.3, 0,
       n.x, n.y, n.radius
@@ -100,6 +126,7 @@
     ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
     ctx.fill();
 
+    // Flash ring
     if (n.flashTime > 0) {
       var age = t - n.flashTime;
       if (age < 1) {
@@ -112,6 +139,7 @@
       }
     }
 
+    // Label
     ctx.fillStyle = hexToRgba(C.text, 0.6 + n.glowIntensity * 0.4);
     ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
@@ -121,19 +149,6 @@
   // ─── Connection ───────────────────────────────────────────────
   function makeConnection(fromNode, toNode) {
     return { from: fromNode, to: toNode, activity: 0 };
-  }
-
-  function bezierPoint(ax, ay, bx, by, t, simT) {
-    var mx = (ax + bx) / 2, my = (ay + by) / 2;
-    var dx = bx - ax, dy = by - ay;
-    var offset = Math.sin(simT * 0.5 + ax * 0.01) * 12;
-    var cx2 = mx + dy * offset * 0.01;
-    var cy2 = my - dx * offset * 0.01;
-    var u = 1 - t;
-    return {
-      x: u * u * ax + 2 * u * t * cx2 + t * t * bx,
-      y: u * u * ay + 2 * u * t * cy2 + t * t * by,
-    };
   }
 
   function drawConnection(ctx, conn, simT) {
@@ -170,6 +185,19 @@
     p.trail.push({ x: pos.x, y: pos.y, age: 0 });
     if (p.trail.length > 10) p.trail.shift();
     for (var i = 0; i < p.trail.length; i++) p.trail[i].age += dt * 4;
+  }
+
+  function bezierPoint(ax, ay, bx, by, t, simT) {
+    var mx = (ax + bx) / 2, my = (ay + by) / 2;
+    var dx = bx - ax, dy = by - ay;
+    var offset = Math.sin(simT * 0.5 + ax * 0.01) * 12;
+    var cx2 = mx + dy * offset * 0.01;
+    var cy2 = my - dx * offset * 0.01;
+    var u = 1 - t;
+    return {
+      x: u * u * ax + 2 * u * t * cx2 + t * t * bx,
+      y: u * u * ay + 2 * u * t * cy2 + t * t * by,
+    };
   }
 
   function drawPulse(ctx, p, simT) {
@@ -238,14 +266,32 @@
     return { nodes: nodes, connections: connections, nodeMap: nodeMap };
   }
 
-  // ─── Canvas Renderer (smooth — no recreate on state update) ───
+  // ─── Offscreen grid cache ─────────────────────────────────────
+  function createGridCache(W, H) {
+    var c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    var ctx = c.getContext("2d");
+    ctx.strokeStyle = "rgba(100,255,218,0.015)";
+    ctx.lineWidth = 0.5;
+    for (var gx = 0; gx < W; gx += 50) {
+      ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
+    }
+    for (var gy = 0; gy < H; gy += 50) {
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+    }
+    return c;
+  }
+
+  // ─── Canvas Renderer (EVENT-DRIVEN — minimal GPU) ────────────
   function SynapseCanvas(props) {
     var canvasRef = useRef(null);
     var animRef = useRef(null);
     var stateRef = useRef(props.stateData);
     var simRef = useRef({ nodes: [], connections: [], pulses: [], simTime: 0, lastTime: 0, fps: 0, fpsFrames: 0, fpsTime: 0, initialized: false });
+    var gridCacheRef = useRef(null);
+    var runningRef = useRef(false);
 
-    // Update state data without recreating canvas
     stateRef.current = props.stateData;
 
     useEffect(function () {
@@ -263,6 +309,9 @@
       var sim = simRef.current;
       sim.simTime = performance.now() / 1000;
       sim.lastTime = performance.now() / 1000;
+
+      // Cache the grid (never changes)
+      gridCacheRef.current = createGridCache(W, H);
 
       // Initial layout
       var data = stateRef.current;
@@ -284,32 +333,24 @@
         }
       });
 
-      // Track last known state for incremental updates
-      var lastStateHash = JSON.stringify(data);
+      var lastStateHash = stateHash(data);
 
-      // 30fps cap + pause when hidden
-      var FRAME_INTERVAL = 1000 / 30; // 30fps
+      // ─── EVENT-DRIVEN RENDER ────────────────────────────────
+      var FRAME_INTERVAL = 1000 / 60; // 60fps — only runs when pulses active
       var lastFrameTime = 0;
       var paused = false;
 
-      function onVisibility() {
-        paused = document.hidden;
-        if (!paused) {
-          lastFrameTime = performance.now();
-          sim.lastTime = performance.now() / 1000;
-          animRef.current = requestAnimationFrame(frame);
-        }
+      function hasActivePulses() {
+        return sim.pulses.length > 0;
       }
-      document.addEventListener("visibilitychange", onVisibility);
 
-      function frame(timestamp) {
-        animRef.current = null;
-        if (paused) return;
+      // Full animation loop — only runs when pulses are active
+      function animLoop(timestamp) {
+        if (paused) { runningRef.current = false; return; }
 
-        // 30fps cap — skip frame if too soon
         var elapsed = timestamp - lastFrameTime;
         if (elapsed < FRAME_INTERVAL) {
-          animRef.current = requestAnimationFrame(frame);
+          animRef.current = requestAnimationFrame(animLoop);
           return;
         }
         lastFrameTime = timestamp - (elapsed % FRAME_INTERVAL);
@@ -323,42 +364,24 @@
         sim.fpsTime += rawDt;
         if (sim.fpsTime >= 0.5) { sim.fps = Math.round(sim.fpsFrames / sim.fpsTime); sim.fpsFrames = 0; sim.fpsTime = 0; }
 
-        // Check for state updates (incremental — no canvas rebuild)
-        var newData = stateRef.current;
-        var newHash = JSON.stringify(newData);
-        if (newHash !== lastStateHash) {
-          lastStateHash = newHash;
-          // Update node states without recreating
-          (newData.agents || []).forEach(function (a) {
-            var node = sim.nodeMap[a.id];
-            if (node) node.state = a.state;
-          });
-          (newData.files || []).forEach(function (f) {
-            var node = sim.nodeMap[f.id];
-            if (node) node.state = f.state;
-          });
-          // Activate new pulses
-          (newData.pulses || []).forEach(function (p) {
-            var fn = sim.nodeMap[p.from], tn = sim.nodeMap[p.to];
-            if (fn && tn) {
-              var c = sim.connections.find(function (x) { return x.from.id === p.from && x.to.id === p.to; });
-              if (c && c.activity < 0.5) { c.activity = 1; sim.pulses.push(makePulse(c)); }
-            }
-          });
-        }
-
         // Update simulation
-        for (var ci = 0; ci < sim.connections.length; ci++) { if (sim.connections[ci].activity > 0) sim.connections[ci].activity = Math.max(0, sim.connections[ci].activity - rawDt * 0.5); }
-        for (var pi = sim.pulses.length - 1; pi >= 0; pi--) { updatePulse(sim.pulses[pi], rawDt, sim.simTime); if (!sim.pulses[pi].alive) sim.pulses.splice(pi, 1); }
-        if (Math.random() < 0.02) { var ac = sim.connections.filter(function (c) { return c.activity > 0.3; }); if (ac.length) sim.pulses.push(makePulse(ac[Math.floor(Math.random() * ac.length)])); }
+        for (var ci = 0; ci < sim.connections.length; ci++) {
+          if (sim.connections[ci].activity > 0) sim.connections[ci].activity = Math.max(0, sim.connections[ci].activity - rawDt * 0.5);
+        }
+        for (var pi = sim.pulses.length - 1; pi >= 0; pi--) {
+          updatePulse(sim.pulses[pi], rawDt, sim.simTime);
+          if (!sim.pulses[pi].alive) sim.pulses.splice(pi, 1);
+        }
+        if (sim.pulses.length > 0 && Math.random() < 0.02) {
+          var ac = sim.connections.filter(function (c) { return c.activity > 0.3; });
+          if (ac.length) sim.pulses.push(makePulse(ac[Math.floor(Math.random() * ac.length)]));
+        }
         for (var ni = 0; ni < sim.nodes.length; ni++) updateNode(sim.nodes[ni], sim.simTime, rawDt);
 
         // Draw
         ctx.fillStyle = "rgba(10,14,26,0.25)";
         ctx.fillRect(0, 0, W, H);
-        ctx.strokeStyle = "rgba(100,255,218,0.015)"; ctx.lineWidth = 0.5;
-        for (var gx = 0; gx < W; gx += 50) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
-        for (var gy = 0; gy < H; gy += 50) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+        if (gridCacheRef.current) ctx.drawImage(gridCacheRef.current, 0, 0);
         for (var ci2 = 0; ci2 < sim.connections.length; ci2++) drawConnection(ctx, sim.connections[ci2], sim.simTime);
         for (var pi2 = 0; pi2 < sim.pulses.length; pi2++) drawPulse(ctx, sim.pulses[pi2], sim.simTime);
         for (var ni2 = 0; ni2 < sim.nodes.length; ni2++) drawNode(ctx, sim.nodes[ni2], sim.simTime);
@@ -368,14 +391,106 @@
         ctx.textAlign = "right";
         ctx.fillText(sim.fps + " FPS", W - 8, 16);
 
-        animRef.current = requestAnimationFrame(frame);
+        if (hasActivePulses()) {
+          animRef.current = requestAnimationFrame(animLoop);
+        } else {
+          runningRef.current = false;
+        }
       }
-      animRef.current = requestAnimationFrame(frame);
+
+      function startLoop() {
+        if (runningRef.current || paused) return;
+        runningRef.current = true;
+        lastFrameTime = performance.now();
+        sim.lastTime = performance.now() / 1000;
+        animRef.current = requestAnimationFrame(animLoop);
+      }
+
+      // Single frame render — no animation loop
+      function renderOnce() {
+        var now = performance.now() / 1000;
+        var rawDt = Math.min(now - sim.lastTime, 0.1);
+        sim.lastTime = now;
+        sim.simTime += rawDt;
+
+        for (var ci = 0; ci < sim.connections.length; ci++) {
+          if (sim.connections[ci].activity > 0) sim.connections[ci].activity = Math.max(0, sim.connections[ci].activity - rawDt * 0.5);
+        }
+        for (var ni = 0; ni < sim.nodes.length; ni++) updateNode(sim.nodes[ni], sim.simTime, rawDt);
+
+        ctx.fillStyle = C.bg;
+        ctx.fillRect(0, 0, W, H);
+        if (gridCacheRef.current) ctx.drawImage(gridCacheRef.current, 0, 0);
+        for (var ci2 = 0; ci2 < sim.connections.length; ci2++) drawConnection(ctx, sim.connections[ci2], sim.simTime);
+        for (var ni2 = 0; ni2 < sim.nodes.length; ni2++) drawNode(ctx, sim.nodes[ni2], sim.simTime);
+
+        ctx.fillStyle = "rgba(100,255,218,0.5)";
+        ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.textAlign = "right";
+        ctx.fillText("IDLE", W - 8, 16);
+      }
+
+      function onVisibility() {
+        paused = document.hidden;
+        if (!paused) {
+          if (hasActivePulses()) startLoop();
+          else renderOnce();
+        }
+      }
+      document.addEventListener("visibilitychange", onVisibility);
+
+      // State update handler — called externally when data changes
+      function onStateUpdate() {
+        var newData = stateRef.current;
+        var newHash = stateHash(newData);
+        if (newHash === lastStateHash) return;
+        lastStateHash = newHash;
+
+        (newData.agents || []).forEach(function (a) {
+          var node = sim.nodeMap[a.id];
+          if (node) node.state = a.state;
+        });
+        (newData.files || []).forEach(function (f) {
+          var node = sim.nodeMap[f.id];
+          if (node) node.state = f.state;
+        });
+
+        // Check for new nodes needing layout
+        var needsRelayout = false;
+        (newData.agents || []).forEach(function (a) { if (!sim.nodeMap[a.id]) needsRelayout = true; });
+        (newData.files || []).forEach(function (f) { if (!sim.nodeMap[f.id]) needsRelayout = true; });
+        if (needsRelayout) {
+          var newLayout = layoutNodes(newData.agents || [], newData.files || [], W, H);
+          sim.nodes = newLayout.nodes;
+          sim.connections = newLayout.connections;
+          sim.nodeMap = newLayout.nodeMap;
+        }
+
+        var hasNewPulses = false;
+        (newData.pulses || []).forEach(function (p) {
+          var fn = sim.nodeMap[p.from], tn = sim.nodeMap[p.to];
+          if (fn && tn) {
+            var c = sim.connections.find(function (x) { return x.from.id === p.from && x.to.id === p.to; });
+            if (c && c.activity < 0.5) { c.activity = 1; sim.pulses.push(makePulse(c)); hasNewPulses = true; }
+          }
+        });
+
+        if (hasNewPulses || hasActivePulses()) startLoop();
+        else renderOnce();
+      }
+
+      sim._onStateUpdate = onStateUpdate;
+
+      // Initial render
+      renderOnce();
+      if (hasActivePulses()) startLoop();
+
       return function () {
         document.removeEventListener("visibilitychange", onVisibility);
+        runningRef.current = false;
         if (animRef.current) cancelAnimationFrame(animRef.current);
       };
-    }, [props.width, props.height]); // Only recreate on resize, NOT on stateData change
+    }, [props.width, props.height]);
 
     return h("canvas", { ref: canvasRef, style: { display: "block", width: props.width + "px", height: props.height + "px" } });
   }
@@ -385,7 +500,6 @@
     var files = props.files || [];
     if (!files.length) return null;
 
-    // Sort: processing first, then queued, then complete at bottom
     var stateOrder = { processing: 0, queued: 1, complete: 2 };
     var sorted = files.slice().sort(function (a, b) {
       var sa = stateOrder[a.state] !== undefined ? stateOrder[a.state] : 1;
@@ -435,19 +549,26 @@
     var _s5 = useState({ w: 660, h: 450 });
     var dims = _s5[0]; var setDims = _s5[1];
     var containerRef = useRef(null);
+    var simRef = useRef(null);
 
     var fetchState = useCallback(function () {
       var url = mode === "demo" ? "/api/plugins/synapse/demo" : "/api/plugins/synapse/status";
       SDK.fetchJSON(url)
-        .then(function (data) { setStateData(data); })
+        .then(function (data) {
+          setStateData(data);
+          // Trigger canvas update via sim ref
+          if (simRef.current && simRef.current._onStateUpdate) {
+            simRef.current._onStateUpdate();
+          }
+        })
         .catch(function (e) { console.error("Synapse fetch error:", e); });
     }, [mode]);
 
     useEffect(function () {
       if (closed) return;
       fetchState();
-      var interval = setInterval(fetchState, 3000);
-      return function () { clearInterval(interval); };
+      var interval = setInterval(fetchState, mode === "demo" ? 3000 : 5000);
+      return function () { clearInterval(interval); }
     }, [fetchState, closed]);
 
     useEffect(function () {

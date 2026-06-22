@@ -24,6 +24,33 @@ fi
 
 [ ! -f /data/.hermes/.env ] && touch /data/.hermes/.env
 
+# Create 336MB swap file for memory pressure relief.
+# Railway containers have limited RAM; swap routes inactive pages to disk
+# instead of OOM-killing the process. The file persists on /data across restarts.
+SWAP_FILE="/data/.swapfile"
+SWAP_SIZE="336M"
+if [ ! -f "$SWAP_FILE" ]; then
+  echo "Creating ${SWAP_SIZE} swap file..."
+  fallocate -l "$SWAP_SIZE" "$SWAP_FILE" 2>/dev/null || dd if=/dev/zero of="$SWAP_FILE" bs=1M count=336 2>/dev/null
+  chmod 600 "$SWAP_FILE"
+  mkswap "$SWAP_FILE" 2>/dev/null
+fi
+# Enable swap if not already active (idempotent)
+if ! swapon --show | grep -q "$SWAP_FILE"; then
+  swapon "$SWAP_FILE" 2>/dev/null || true
+fi
+
+# Inject SQLite mmap_size PRAGMA into hermes_state.py if not present.
+# /opt/hermes-agent/ is rebuilt on every Railway deploy, so this patch
+# must be re-applied each boot. 256MB mmap lets the OS manage SQLite
+# pages via page cache instead of malloc — evicts cold pages under pressure.
+STATE_PY="/opt/hermes-agent/hermes_state.py"
+if [ -f "$STATE_PY" ] && ! grep -q "mmap_size" "$STATE_PY" 2>/dev/null; then
+  sed -i '/PRAGMA foreign_keys=ON/a\                # Memory-mapped I/O: OS manages SQLite pages via page cache.\n                # Under pressure, cold DB pages evict to disk automatically.\n                self._conn.execute("PRAGMA mmap_size=268435456")' "$STATE_PY" 2>/dev/null || true
+  # Clear Python bytecode cache so the patched file is imported fresh
+  find /opt/hermes-agent -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+fi
+
 # Bootstrap OAuth tokens from env var (e.g. xAI Grok SuperGrok).
 # Set HERMES_AUTH_JSON_BOOTSTRAP to the contents of a locally-generated
 # ~/.hermes/auth.json. Written only once — subsequent token refreshes update
@@ -63,22 +90,30 @@ REPO="/data/hermes-agent-template"
 REPO_PLUGINS="$REPO/plugins"
 HERMES_PLUGINS="$HERMES_HOME/plugins"
 
-# Pull latest from GitHub before syncing (ensures deploy picks up pushed changes)
-if [ -d "$REPO/.git" ]; then
-  cd "$REPO" && git pull --ff-only origin main 2>/dev/null || true
-fi
+# If a backup was restored, skip git pull + plugin sync to avoid re-fetching
+# broken upstream code. Remove the flag after fixing origin/main:
+#   rm /data/.hermes/.skip_git_pull
+if [ -f "$HERMES_HOME/.skip_git_pull" ]; then
+  echo "⚠️  .skip_git_pull found — skipping git pull and plugin sync (backup restore mode)"
+  echo "   Remove with: rm /data/.hermes/.skip_git_pull"
+else
+  # Pull latest from GitHub before syncing (ensures deploy picks up pushed changes)
+  if [ -d "$REPO/.git" ]; then
+    cd "$REPO" && git pull --ff-only origin main 2>/dev/null || true
+  fi
 
-if [ -d "$REPO_PLUGINS" ]; then
-  for plugin_dir in "$REPO_PLUGINS"/*/dashboard; do
-    [ -d "$plugin_dir" ] || continue
-    plugin_name="$(basename "$(dirname "$plugin_dir")")"
-    dest="$HERMES_PLUGINS/$plugin_name/dashboard"
-    mkdir -p "$dest"
-    # Nuke old dist/python to avoid stale files, then copy fresh
-    rm -rf "$dest"
-    mkdir -p "$dest"
-    cp -a "$plugin_dir/." "$dest/"
-  done
+  if [ -d "$REPO_PLUGINS" ]; then
+    for plugin_dir in "$REPO_PLUGINS"/*/dashboard; do
+      [ -d "$plugin_dir" ] || continue
+      plugin_name="$(basename "$(dirname "$plugin_dir")")"
+      dest="$HERMES_PLUGINS/$plugin_name/dashboard"
+      mkdir -p "$dest"
+      # Nuke old dist/python to avoid stale files, then copy fresh
+      rm -rf "$dest"
+      mkdir -p "$dest"
+      cp -a "$plugin_dir/." "$dest/"
+    done
+  fi
 fi
 
 exec python /app/server.py
