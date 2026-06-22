@@ -36,11 +36,10 @@ RUN apt-get update && \
 # Adds the official PostgreSQL apt repo for bookworm, installs the server
 # and the pgvector extension. Data directory lives on /data volume so it
 # survives redeployments. Adds ~50MB to the image.
-RUN install -d /usr/share/postgresql-common/pgdg && \
-    echo "deb http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
-      > /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc && \
-    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-      | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg && \
+RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+      | gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+      > /etc/apt/sources.list.d/pgdg.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       postgresql-15 postgresql-15-pgvector && \
