@@ -24,22 +24,6 @@ fi
 
 [ ! -f /data/.hermes/.env ] && touch /data/.hermes/.env
 
-# Create 336MB swap file for memory pressure relief.
-# Railway containers have limited RAM; swap routes inactive pages to disk
-# instead of OOM-killing the process. The file persists on /data across restarts.
-SWAP_FILE="/data/.swapfile"
-SWAP_SIZE="336M"
-if [ ! -f "$SWAP_FILE" ]; then
-  echo "Creating ${SWAP_SIZE} swap file..."
-  fallocate -l "$SWAP_SIZE" "$SWAP_FILE" 2>/dev/null || dd if=/dev/zero of="$SWAP_FILE" bs=1M count=336 2>/dev/null
-  chmod 600 "$SWAP_FILE"
-  mkswap "$SWAP_FILE" 2>/dev/null
-fi
-# Enable swap if not already active (idempotent)
-if ! swapon --show | grep -q "$SWAP_FILE"; then
-  swapon "$SWAP_FILE" 2>/dev/null || true
-fi
-
 # Inject SQLite mmap_size PRAGMA into hermes_state.py if not present.
 # /opt/hermes-agent/ is rebuilt on every Railway deploy, so this patch
 # must be re-applied each boot. 256MB mmap lets the OS manage SQLite
