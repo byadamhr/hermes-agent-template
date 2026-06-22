@@ -1,6 +1,112 @@
 #!/bin/bash
 set -e
 
+# ─── PostgreSQL (Honcho backend) ────────────────────────────────────────────
+# Honcho requires PostgreSQL + pgvector. Data lives on /data/honcho-db/
+# so it survives container rebuilds. On first boot, we initialize the
+# cluster; on subsequent boots, we just start the existing one.
+HONCHO_PGDATA="/data/honcho-db"
+HONCHO_DB_USER="honcho"
+HONCHO_DB_PASS="honcho"
+HONCHO_DB_NAME="honcho"
+
+if [ ! -f "$HONCHO_PGDATA/PG_VERSION" ]; then
+  echo "=== Initializing PostgreSQL for Honcho ==="
+  mkdir -p "$HONCHO_PGDATA"
+  chown postgres:postgres "$HONCHO_PGDATA"
+  # Run initdb as the postgres system user
+  su - postgres -c "/usr/lib/postgresql/15/bin/initdb -D '$HONCHO_PGDATA' --auth=trust"
+  # Allow local connections without password (trust auth)
+  echo "local all all trust" > "$HONCHO_PGDATA/pg_hba.conf"
+  echo "host all all 127.0.0.1/32 trust" >> "$HONCHO_PGDATA/pg_hba.conf"
+  echo "host all all ::1/128 trust" >> "$HONCHO_PGDATA/pg_hba.conf"
+fi
+
+# Start PostgreSQL (always, even if already running from a previous boot)
+if ! su - postgres -c "/usr/lib/postgresql/15/bin/pg_isready -D '$HONCHO_PGDATA'" >/dev/null 2>&1; then
+  echo "=== Starting PostgreSQL ==="
+  su - postgres -c "/usr/lib/postgresql/15/bin/pg_ctl -D '$HONCHO_PGDATA' -l '$HONCHO_PGDATA/pg.log' start -w"
+  # Wait for ready
+  for i in $(seq 1 30); do
+    if su - postgres -c "/usr/lib/postgresql/15/bin/pg_isready -D '$HONCHO_PGDATA'" >/dev/null 2>&1; then
+      echo "=== PostgreSQL ready ==="
+      break
+    fi
+    sleep 1
+  done
+fi
+
+# Create Honcho database and user if they don't exist
+su - postgres -c "/usr/lib/postgresql/15/bin/psql -tc \"SELECT 1 FROM pg_roles WHERE rolname='$HONCHO_DB_USER'\" -D '$HONCHO_PGDATA'" | grep -q 1 || \
+  su - postgres -c "/usr/lib/postgresql/15/bin/psql -c \"CREATE USER $HONCHO_DB_USER WITH PASSWORD '$HONCHO_DB_PASS';\" -D '$HONCHO_PGDATA'"
+su - postgres -c "/usr/lib/postgresql/15/bin/psql -tc \"SELECT 1 FROM pg_database WHERE datname='$HONCHO_DB_NAME'\" -D '$HONCHO_PGDATA'" | grep -q 1 || \
+  su - postgres -c "/usr/lib/postgresql/15/bin/psql -c \"CREATE DATABASE $HONCHO_DB_NAME OWNER $HONCHO_DB_USER;\" -D '$HONCHO_PGDATA'"
+# Enable pgvector extension
+su - postgres -c "/usr/lib/postgresql/15/bin/psql -d $HONCHO_DB_NAME -c 'CREATE EXTENSION IF NOT EXISTS vector;' -D '$HONCHO_PGDATA'" 2>/dev/null || true
+
+# ─── Honcho configuration ──────────────────────────────────────────────────
+HONCHO_CONFIG="/data/.hermes/honcho.json"
+if [ ! -f "$HONCHO_CONFIG" ]; then
+  echo "=== Creating default Honcho config ==="
+  cat > "$HONCHO_CONFIG" <<'HONCHO_EOF'
+{
+  "apiKey": "",
+  "baseUrl": "http://127.0.0.1:8000",
+  "workspace": "hermes",
+  "peerName": "user",
+  "enabled": false,
+  "recallMode": "hybrid",
+  "contextCadence": 2,
+  "dialecticCadence": 3,
+  "dialecticDepth": 1,
+  "dialecticReasoningLevel": "low",
+  "dialecticMaxChars": 600,
+  "writeFrequency": "async",
+  "saveMessages": true,
+  "sessionStrategy": "per-directory",
+  "hosts": {
+    "hermes": {
+      "aiPeer": "hermes",
+      "recallMode": "hybrid"
+    }
+  }
+}
+HONCHO_EOF
+fi
+
+# ─── Honcho server environment ─────────────────────────────────────────────
+export HONCHO_DB_URI="postgresql+psycopg://$HONCHO_DB_USER:$HONCHO_DB_PASS@localhost:5432/$HONCHO_DB_NAME"
+export HONCHO_BASE_URL="http://127.0.0.1:8000"
+
+# LLM keys for Honcho's background processing (deriver, summary, dialectic)
+# These should be set in /data/.hermes/.env or Railway environment variables
+# Honcho reads from its own env vars: LLM_GEMINI_API_KEY, LLM_ANTHROPIC_API_KEY, LLM_OPENAI_API_KEY
+# For OpenRouter-backed models, set the base_url in honcho.json overrides
+[ -f /data/.hermes/.env ] && set -a && . /data/.hermes/.env && set +a
+
+# Start Honcho API server in background
+if [ -d /opt/honcho/.venv ] && [ -f /opt/honcho/src/main.py ]; then
+  echo "=== Starting Honcho API server ==="
+  /opt/honcho/.venv/bin/fastapi run --host 127.0.0.1 --port 8000 /opt/honcho/src/main.py \
+    > /data/.hermes/logs/honcho-api.log 2>&1 &
+  HONCHO_API_PID=$!
+  echo "Honcho API PID: $HONCHO_API_PID"
+
+  # Run database migrations
+  echo "=== Running Honcho database migrations ==="
+  cd /opt/honcho && /opt/honcho/.venv/bin/python scripts/provision_db.py 2>&1 || \
+    echo "WARNING: Honcho migration failed (may be first boot, retrying after API starts)"
+
+  # Start deriver worker in background
+  echo "=== Starting Honcho deriver worker ==="
+  /opt/honcho/.venv/bin/python -m src.deriver \
+    > /data/.hermes/logs/honcho-deriver.log 2>&1 &
+  HONCHO_DERIVER_PID=$!
+  echo "Honcho deriver PID: $HONCHO_DERIVER_PID"
+fi
+
+# ─── Hermes startup (unchanged from here) ─────────────────────────────────
+
 # Fix: ensure .git ownership matches the current container user.
 # Railway mounts /data as a persistent volume whose ownership can lag behind
 # image changes (e.g. after switching between root and hermes user). Without

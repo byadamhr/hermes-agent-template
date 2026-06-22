@@ -32,6 +32,20 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
+# Install PostgreSQL 15 + pgvector for Honcho self-hosting.
+# Adds the official PostgreSQL apt repo for bookworm, installs the server
+# and the pgvector extension. Data directory lives on /data volume so it
+# survives redeployments. Adds ~50MB to the image.
+RUN install -d /usr/share/postgresql-common/pgdg && \
+    echo "deb http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+      > /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc && \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+      | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      postgresql-15 postgresql-15-pgvector && \
+    rm -rf /var/lib/apt/lists/*
+
 # Install hermes-agent (provides the `hermes` CLI) and pre-build its React
 # dashboard so `hermes dashboard` has nothing to build at runtime.
 #
@@ -63,6 +77,15 @@ RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/h
 #   at user request time, and makes first-chat-open instant.
 # - We keep ui-tui/ entirely (node_modules + dist + src) so HERMES_TUI_DIR
 #   can point at it (see below).
+
+# Clone Honcho server for self-hosting.
+# Honcho is AGPL-3.0. We install it in /opt/honcho with its own venv so
+# Hermes and Honcho dependencies stay isolated. The deriver worker and
+# FastAPI server run from this venv.
+RUN git clone --depth 1 https://github.com/plastic-labs/honcho.git /opt/honcho && \
+    cd /opt/honcho && \
+    uv sync --frozen --no-group dev && \
+    rm -rf /opt/honcho/.git /opt/honcho/tests
 
 COPY requirements.txt /app/requirements.txt
 RUN uv pip install --system --no-cache -r /app/requirements.txt
