@@ -75,7 +75,7 @@ HONCHO_EOF
 fi
 
 # ─── Honcho server environment ─────────────────────────────────────────────
-export HONCHO_DB_URI="postgresql+psycopg://$HONCHO_DB_USER:$HONCHO_DB_PASS@localhost:5432/$HONCHO_DB_NAME?options=-c%20client_encoding%3DUTF8"
+export DB_CONNECTION_URI="postgresql+psycopg://$HONCHO_DB_USER:$HONCHO_DB_PASS@localhost:5432/$HONCHO_DB_NAME?options=-c%20client_encoding%3DUTF8"
 export HONCHO_BASE_URL="http://127.0.0.1:8000"
 
 # LLM keys for Honcho's background processing (deriver, summary, dialectic)
