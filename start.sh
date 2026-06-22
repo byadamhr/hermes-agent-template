@@ -84,6 +84,14 @@ export HONCHO_BASE_URL="http://127.0.0.1:8000"
 # For OpenRouter-backed models, set the base_url in honcho.json overrides
 [ -f /data/.hermes/.env ] && set -a && . /data/.hermes/.env && set +a
 
+# Patch SQLAlchemy to handle bytes from pg_catalog.version() (psycopg3 issue).
+# /opt/honcho/ is rebuilt on every deploy, so this must be re-applied each boot.
+SA_DIALECT="/opt/honcho/.venv/lib/python3.12/site-packages/sqlalchemy/dialects/postgresql/base.py"
+if [ -f "$SA_DIALECT" ] && ! grep -q "honcho_bytes_patch" "$SA_DIALECT" 2>/dev/null; then
+  sed -i '/v = connection.exec_driver_sql.*pg_catalog.version.*scalar/a\        # honcho_bytes_patch: psycopg3 may return bytes instead of str\n        if isinstance(v, bytes): v = v.decode()' "$SA_DIALECT" 2>/dev/null || true
+  find /opt/honcho -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+fi
+
 # Start Honcho API server in background
 if [ -d /opt/honcho/.venv ] && [ -f /opt/honcho/src/main.py ]; then
   echo "=== Starting Honcho API server ==="
