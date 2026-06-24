@@ -68,6 +68,11 @@ HERMES_DASHBOARD_HOST = "127.0.0.1"
 HERMES_DASHBOARD_PORT = int(os.environ.get("HERMES_DASHBOARD_PORT", "9119"))
 HERMES_DASHBOARD_URL = f"http://{HERMES_DASHBOARD_HOST}:{HERMES_DASHBOARD_PORT}"
 
+# Telegram webhook server — runs on a separate port inside the gateway process.
+TELEGRAM_WEBHOOK_HOST = "127.0.0.1"
+TELEGRAM_WEBHOOK_PORT = int(os.environ.get("TELEGRAM_WEBHOOK_PORT", "8443"))
+TELEGRAM_WEBHOOK_URL = f"http://{TELEGRAM_WEBHOOK_HOST}:{TELEGRAM_WEBHOOK_PORT}"
+
 # ── File upload ────────────────────────────────────────────────────────────────
 MEDIA_ROOT = Path("/data/media").resolve()
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -1471,6 +1476,43 @@ It may still be starting up, or it may have crashed.</p>
 </body></html>""" % HERMES_DASHBOARD_PORT
 
 
+async def _proxy_to_telegram(request: Request) -> Response:
+    """Forward Telegram webhook updates to the gateway's webhook server."""
+    client = get_http_client()
+    target = f"{TELEGRAM_WEBHOOK_URL}{request.url.path}"
+    if request.url.query:
+        target = f"{target}?{request.url.query}"
+
+    req_headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in HOP_BY_HOP
+    }
+    body = await request.body()
+
+    try:
+        upstream = await client.request(
+            request.method,
+            target,
+            headers=req_headers,
+            content=body,
+        )
+    except (httpx.ConnectError, httpx.ConnectTimeout):
+        return Response("Telegram webhook server unavailable", status_code=503)
+    except httpx.RequestError as e:
+        print(f"[proxy] telegram webhook error: {e}", flush=True)
+        return Response("Telegram webhook proxy error", status_code=502)
+
+    resp_headers = {
+        k: v for k, v in upstream.headers.items()
+        if k.lower() not in HOP_BY_HOP
+    }
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        headers=resp_headers,
+    )
+
+
 async def _proxy_to_dashboard(request: Request) -> Response:
     """Forward an authenticated request to the Hermes dashboard subprocess.
 
@@ -1565,6 +1607,11 @@ async def route_setup_404(request: Request) -> Response:
     """Typos under /setup/* should 404 here — not fall through to the proxy."""
     if err := guard(request): return err
     return Response("Not Found", status_code=404, media_type="text/plain")
+
+
+async def route_telegram(request: Request) -> Response:
+    """Proxy Telegram webhook updates to the gateway's webhook server."""
+    return await _proxy_to_telegram(request)
 
 
 # ── App lifecycle ─────────────────────────────────────────────────────────────
@@ -1805,6 +1852,9 @@ routes = [
     # (e.g. kanban's /api/plugins/kanban/events). Prefix-matched so new plugin
     # WS endpoints in future hermes releases proxy without re-touching this list.
     WebSocketRoute("/api/plugins/{path:path}",  ws_proxy),
+
+    # Telegram webhook — proxy to the gateway's webhook server on 8443.
+    Route("/telegram",                           route_telegram,      methods=["POST"]),
 
     # Root: redirect to /setup if unconfigured, otherwise proxy the dashboard.
     Route("/",                                  route_root,          methods=ANY_METHOD),
