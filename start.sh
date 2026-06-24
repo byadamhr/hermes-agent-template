@@ -78,7 +78,7 @@ fi
 export DB_CONNECTION_URI="postgresql+psycopg://$HONCHO_DB_USER:$HONCHO_DB_PASS@localhost:5432/$HONCHO_DB_NAME?options=-c%20client_encoding%3DUTF8"
 export DB_POOL_SIZE=3
 export DB_MAX_OVERFLOW=6
-export DB_POOL_CLASS=null
+# export DB_POOL_CLASS=null  # NullPool disables connection reuse — use default QueuePool
 export WEB_CONCURRENCY=1
 export HONCHO_BASE_URL="http://127.0.0.1:8000"
 
