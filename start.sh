@@ -58,7 +58,7 @@ if [ ! -f "$HONCHO_CONFIG" ]; then
   "recallMode": "hybrid",
   "contextCadence": 5,
   "dialecticCadence": 3,
-  "dialecticDepth": 2,
+  "dialecticDepth": 1,
   "dialecticReasoningLevel": "low",
   "dialecticMaxChars": 600,
   "writeFrequency": "async",
