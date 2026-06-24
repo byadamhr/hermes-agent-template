@@ -56,9 +56,9 @@ if [ ! -f "$HONCHO_CONFIG" ]; then
   "peerName": "user",
   "enabled": false,
   "recallMode": "hybrid",
-  "contextCadence": 2,
+  "contextCadence": 5,
   "dialecticCadence": 3,
-  "dialecticDepth": 1,
+  "dialecticDepth": 2,
   "dialecticReasoningLevel": "low",
   "dialecticMaxChars": 600,
   "writeFrequency": "async",
@@ -76,6 +76,10 @@ fi
 
 # ─── Honcho server environment ─────────────────────────────────────────────
 export DB_CONNECTION_URI="postgresql+psycopg://$HONCHO_DB_USER:$HONCHO_DB_PASS@localhost:5432/$HONCHO_DB_NAME?options=-c%20client_encoding%3DUTF8"
+export DB_POOL_SIZE=3
+export DB_MAX_OVERFLOW=6
+export DB_POOL_CLASS=null
+export WEB_CONCURRENCY=1
 export HONCHO_BASE_URL="http://127.0.0.1:8000"
 
 # LLM keys for Honcho's background processing (deriver, summary, dialectic)
@@ -187,6 +191,13 @@ if [ -f "$STATE_PY" ] && ! grep -q "mmap_size" "$STATE_PY" 2>/dev/null; then
   sed -i '/PRAGMA foreign_keys=ON/a\                # Memory-mapped I/O: OS manages SQLite pages via page cache.\n                # Under pressure, cold DB pages evict to disk automatically.\n                self._conn.execute("PRAGMA mmap_size=268435456")' "$STATE_PY" 2>/dev/null || true
   # Clear Python bytecode cache so the patched file is imported fresh
   find /opt/hermes-agent -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+fi
+
+# Re-apply cost footer patch (adds cost + tokens to runtime footer).
+# /opt/hermes-agent/ is rebuilt on every Railway deploy, so this must
+# be re-applied each boot. The skill script lives on persistent /data/.
+if [ -f /data/.hermes/skills/devops/cost-footer-patch/scripts/apply_patch.sh ]; then
+  bash /data/.hermes/skills/devops/cost-footer-patch/scripts/apply_patch.sh 2>&1 || true
 fi
 
 # Bootstrap OAuth tokens from env var (e.g. xAI Grok SuperGrok).
