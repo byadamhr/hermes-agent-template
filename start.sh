@@ -220,6 +220,18 @@ if [ -f /data/.hermes/skills/devops/cost-footer-patch/scripts/apply_patch.sh ]; 
   bash /data/.hermes/skills/devops/cost-footer-patch/scripts/apply_patch.sh 2>&1 || true
 fi
 
+# Re-apply plugin security override: v0.17.0 added a security gate (GHSA-5qr3-c538-wm9j)
+# that blocks user-installed plugins from importing Python API routes. Our media and
+# synapse plugins live under ~/.hermes/plugins/ (user source) and need their API routes.
+# Patch: remove 'user' from the non-bundled blocklist so user plugin APIs are mounted.
+WEB_PY="/opt/hermes-agent/hermes_cli/web_server.py"
+if [ -f "$WEB_PY" ] && grep -q '_NON_BUNDLED_PLUGIN_SOURCES = frozenset({"user", "project"})' "$WEB_PY" 2>/dev/null; then
+  python3 -c "import pathlib; p=pathlib.Path('$WEB_PY'); c=p.read_text(); c=c.replace('{"user", "project"}', '{"project"}'); p.write_text(c)"
+  # Clear bytecode cache so patched file is imported fresh
+  find /opt/hermes-agent -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+  echo "=== Plugin security override applied (user-installed API routes re-enabled) ==="
+fi
+
 # Bootstrap OAuth tokens from env var (e.g. xAI Grok SuperGrok).
 # Set HERMES_AUTH_JSON_BOOTSTRAP to the contents of a locally-generated
 # ~/.hermes/auth.json. Written only once — subsequent token refreshes update
