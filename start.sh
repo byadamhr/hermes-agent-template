@@ -224,12 +224,24 @@ fi
 # that blocks user-installed plugins from importing Python API routes. Our media and
 # synapse plugins live under ~/.hermes/plugins/ (user source) and need their API routes.
 # Patch: remove 'user' from the non-bundled blocklist so user plugin APIs are mounted.
+# Uses sed (not python3) for reliability in shell context. Idempotent — safe to run
+# even if the patch was already applied (sed is a no-op when pattern is absent).
 WEB_PY="/opt/hermes-agent/hermes_cli/web_server.py"
-if [ -f "$WEB_PY" ] && grep -q '_NON_BUNDLED_PLUGIN_SOURCES = frozenset({"user", "project"})' "$WEB_PY" 2>/dev/null; then
-  python3 -c "import pathlib; p=pathlib.Path('$WEB_PY'); c=p.read_text(); c=c.replace('{"user", "project"}', '{"project"}'); p.write_text(c)"
-  # Clear bytecode cache so patched file is imported fresh
+if [ -f "$WEB_PY" ]; then
+  # Always clear bytecode cache to ensure the patched .py is imported fresh
   find /opt/hermes-agent -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
-  echo "=== Plugin security override applied (user-installed API routes re-enabled) ==="
+  # Apply patch if "user" is still in the blocklist
+  if grep -q '"user"' "$WEB_PY" 2>/dev/null; then
+    sed -i 's/frozenset({"user", "project"})/frozenset({"project"})/' "$WEB_PY"
+    # Verify the patch applied
+    if grep -q 'frozenset({"project"})' "$WEB_PY" && ! grep -q '"user"' "$WEB_PY"; then
+      echo "=== Plugin security override applied (user-installed API routes re-enabled) ==="
+    else
+      echo "WARNING: Plugin security override may not have applied correctly"
+    fi
+  else
+    echo "=== Plugin security override already applied ==="
+  fi
 fi
 
 # Bootstrap OAuth tokens from env var (e.g. xAI Grok SuperGrok).
@@ -294,7 +306,30 @@ else
       mkdir -p "$dest"
       cp -a "$plugin_dir/." "$dest/"
     done
+    # Also sync plugin scripts (e.g. synapse_monitor.py)
+    for plugin_dir in "$REPO_PLUGINS"/*/scripts; do
+      [ -d "$plugin_dir" ] || continue
+      plugin_name="$(basename "$(dirname "$plugin_dir")")"
+      dest="$HERMES_PLUGINS/$plugin_name/scripts"
+      mkdir -p "$dest"
+      rm -rf "$dest"
+      mkdir -p "$dest"
+      cp -a "$plugin_dir/." "$dest/"
+    done
   fi
+fi
+
+# Start synapse monitor in background (updates /data/synapse_state.json every 5s)
+SYNAPSE_MONITOR="/data/.hermes/plugins/synapse/scripts/synapse_monitor.py"
+if [ ! -f "$SYNAPSE_MONITOR" ]; then
+  # Fallback to repo copy if not synced to plugins dir
+  SYNAPSE_MONITOR="/data/hermes-agent-template/plugins/synapse/scripts/synapse_monitor.py"
+fi
+if [ -f "$SYNAPSE_MONITOR" ]; then
+  # Kill any stale monitor from a previous container (if somehow still running)
+  pkill -f "synapse_monitor.py" 2>/dev/null || true
+  nohup python3 "$SYNAPSE_MONITOR" > /data/.hermes/logs/synapse_monitor.log 2>&1 &
+  echo "=== Synapse monitor started (PID: $!) ==="
 fi
 
 exec python /app/server.py
