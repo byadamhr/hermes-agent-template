@@ -81,9 +81,10 @@ RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/h
 # Honcho is AGPL-3.0. We install it in /opt/honcho with its own venv so
 # Hermes and Honcho dependencies stay isolated. The deriver worker and
 # FastAPI server run from this venv.
-RUN git clone --depth 1 https://github.com/plastic-labs/honcho.git /opt/honcho && \
+RUN uv python install 3.13 && \
+    git clone --depth 1 https://github.com/plastic-labs/honcho.git /opt/honcho && \
     cd /opt/honcho && \
-    uv sync --frozen --no-group dev --python 3.12 && \
+    uv sync --frozen --no-group dev --python 3.13 && \
     rm -rf /opt/honcho/.git /opt/honcho/tests
 
 COPY requirements.txt /app/requirements.txt
