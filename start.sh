@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-/app/patch_websocket_config.sh
+# /app/patch_websocket_config.sh  # DISABLED: corrupts hermes_state.py on boot
 
 # ─── PostgreSQL (Honcho backend) ────────────────────────────────────────────
 # Honcho requires PostgreSQL + pgvector. Data lives on /data/honcho-db/
