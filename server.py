@@ -1671,7 +1671,9 @@ async def lifespan(app):
 PROXIED_WS_PATHS = ("/api/pty", "/api/ws", "/api/events", "/api/plugins/*")
 
 # Fix #18: Close WebSocket connections idle for longer than this (seconds).
-_WS_IDLE_TIMEOUT = 300  # 5 minutes
+_WS_IDLE_TIMEOUT = int(os.environ.get("WS_IDLE_TIMEOUT", "3600"))  # 1 hour
+_WS_PING_INTERVAL = float(os.environ.get("WS_PING_INTERVAL", "30"))
+_WS_PING_TIMEOUT = float(os.environ.get("WS_PING_TIMEOUT", "30"))
 
 
 async def _ws_pump_client_to_upstream(
@@ -1758,6 +1760,8 @@ async def ws_proxy(websocket: WebSocket) -> None:
         upstream = await websockets.connect(
             upstream_url,
             open_timeout=5,
+            ping_interval=_WS_PING_INTERVAL,
+            ping_timeout=_WS_PING_TIMEOUT,
             # Don't forward client cookies/headers — hermes WS auth is
             # purely token-based via the URL, and forwarding random
             # headers risks future upstream surprises.
