@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+/app/patch_websocket_config.sh
+
 # ─── PostgreSQL (Honcho backend) ────────────────────────────────────────────
 # Honcho requires PostgreSQL + pgvector. Data lives on /data/honcho-db/
 # so it survives container rebuilds. On first boot, we initialize the
