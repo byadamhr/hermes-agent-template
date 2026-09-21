@@ -204,16 +204,15 @@ fi
 
 [ ! -f /data/.hermes/.env ] && touch /data/.hermes/.env
 
-# Inject SQLite mmap_size PRAGMA into hermes_state.py if not present.
-# /opt/hermes-agent/ is rebuilt on every Railway deploy, so this patch
-# must be re-applied each boot. 256MB mmap lets the OS manage SQLite
-# pages via page cache instead of malloc — evicts cold pages under pressure.
-STATE_PY="/opt/hermes-agent/hermes_state.py"
-if [ -f "$STATE_PY" ] && ! grep -q "mmap_size" "$STATE_PY" 2>/dev/null; then
-  sed -i '/PRAGMA foreign_keys=ON/a\                # Memory-mapped I/O: OS manages SQLite pages via page cache.\n                # Under pressure, cold DB pages evict to disk automatically.\n                self._conn.execute("PRAGMA mmap_size=268435456")' "$STATE_PY" 2>/dev/null || true
-  # Clear Python bytecode cache so the patched file is imported fresh
-  find /opt/hermes-agent -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-fi
+# DISABLED: mmap_size sed patch corrupted hermes_state.py on every boot
+# The patch attempted to add PRAGMA mmap_size but broke Python indentation
+# Commenting out to allow hermes-agent to work with default SQLite config
+# STATE_PY="/opt/hermes-agent/hermes_state.py"
+# if [ -f "$STATE_PY" ] && ! grep -q "mmap_size" "$STATE_PY" 2>/dev/null; then
+#   sed -i '/PRAGMA foreign_keys=ON/a\                # Memory-mapped I/O: OS manages SQLite pages via page cache.\n                # Under pressure, cold DB pages evict to disk automatically.\n                self._conn.execute("PRAGMA mmap_size=268435456")' "$STATE_PY" 2>/dev/null || true
+#   # Clear Python bytecode cache so the patched file is imported fresh
+#   find /opt/hermes-agent -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+# fi
 
 # Re-apply cost footer patch (adds cost + tokens to runtime footer).
 # /opt/hermes-agent/ is rebuilt on every Railway deploy, so this must
