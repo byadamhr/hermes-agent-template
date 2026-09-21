@@ -102,7 +102,8 @@ RUN git config --global --add safe.directory '*'
 COPY server.py /app/server.py
 COPY templates/ /app/templates/
 COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
+COPY patch_websocket_config.sh /app/patch_websocket_config.sh
+RUN chmod +x /app/start.sh /app/patch_websocket_config.sh
 
 ENV HOME=/data
 ENV HERMES_HOME=/data/.hermes
