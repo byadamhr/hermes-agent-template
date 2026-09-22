@@ -333,4 +333,15 @@ if [ -f "$SYNAPSE_MONITOR" ]; then
   echo "=== Synapse monitor started (PID: $!) ==="
 fi
 
+# ─── WebSocket idle timeout + keepalive (restores PR #9 fix) ──────────────
+# Long-lived /api/pty, /api/ws, /api/events connections were getting dropped
+# after 300s of idle time. Bump the idle timeout to 1 hour and enable
+# upstream ping/pong keepalive so intermediate proxies don't consider the
+# connection dead during quiet periods. server.py reads these via
+# os.environ.get(...) with the same defaults, so this is belt-and-suspenders
+# — it also makes the values easy to override per-environment on Railway.
+export WS_IDLE_TIMEOUT="${WS_IDLE_TIMEOUT:-3600}"
+export WS_PING_INTERVAL="${WS_PING_INTERVAL:-30}"
+export WS_PING_TIMEOUT="${WS_PING_TIMEOUT:-30}"
+
 exec python /app/server.py
