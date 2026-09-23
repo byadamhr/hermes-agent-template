@@ -245,6 +245,20 @@ if [ -f "$WEB_PY" ]; then
   fi
 fi
 
+# Disable Telegram bot identity refresh loop — it calls getMe() every 5 min
+# (outbound to api.telegram.org) which prevents Railway from sleeping.
+# Railway requires zero outbound traffic for 10 min; 5 min < 10 min = never sleeps.
+# Only needed if you rename the bot via BotFather (just restart gateway after).
+TG_ADAPTER="/opt/hermes-agent/plugins/platforms/telegram/adapter.py"
+if [ -f "$TG_ADAPTER" ] && grep -q "_BOT_IDENTITY_TTL_SECONDS = 300" "$TG_ADAPTER" 2>/dev/null; then
+  sed -i 's/_BOT_IDENTITY_TTL_SECONDS = 300\.0/_BOT_IDENTITY_TTL_SECONDS = 86400.0/' "$TG_ADAPTER"
+  # Clear Python bytecode cache so the patched file is imported fresh
+  find /opt/hermes-agent -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
+  echo "=== Telegram identity refresh disabled (TTL=86400s) — restored on next deploy ==="
+else
+  echo "=== Telegram identity refresh already patched or file not found ==="
+fi
+
 # Bootstrap OAuth tokens from env var (e.g. xAI Grok SuperGrok).
 # Set HERMES_AUTH_JSON_BOOTSTRAP to the contents of a locally-generated
 # ~/.hermes/auth.json. Written only once — subsequent token refreshes update
