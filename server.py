@@ -52,7 +52,6 @@ from starlette.responses import (
     Response,
 )
 from starlette.routing import Route, WebSocketRoute
-from alexa_handler import route_alexa
 from starlette.templating import Jinja2Templates
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
@@ -1882,7 +1881,6 @@ routes = [
     WebSocketRoute("/api/plugins/{path:path}",  ws_proxy),
 
     # Telegram webhook — proxy to the gateway's webhook server on 8443.
-    Route("/alexa",                              route_alexa,         methods=["POST"]),
     Route("/telegram",                           route_telegram,      methods=["POST"]),
 
     # Root: redirect to /setup if unconfigured, otherwise proxy the dashboard.
