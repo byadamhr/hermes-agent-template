@@ -1779,8 +1779,7 @@ async def ws_proxy(websocket: WebSocket) -> None:
         upstream = await websockets.connect(
             upstream_url,
             open_timeout=5,
-            ping_interval=_WS_PING_INTERVAL,
-            ping_timeout=_WS_PING_TIMEOUT,
+            ping_interval=None,  # disabled: pings keep upstream alive → prevents Railway sleep
             # Don't forward client cookies/headers — hermes WS auth is
             # purely token-based via the URL, and forwarding random
             # headers risks future upstream surprises.
