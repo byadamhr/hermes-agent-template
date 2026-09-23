@@ -281,6 +281,24 @@ if ! command -v pocket-tts &>/dev/null; then
   pip install -q pocket-tts 2>/dev/null || true
 fi
 
+# Ensure custom dashboard plugins are in plugins.enabled (security gate blocks unknowns)
+HERMES_CFG="/data/.hermes/config.yaml"
+if [ -f "$HERMES_CFG" ]; then
+  for plug in media synapse tryon gamma; do
+    if ! grep -q "\"$plug\"" "$HERMES_CFG" 2>/dev/null && ! grep -q "- $plug" "$HERMES_CFG" 2>/dev/null; then
+      echo "Adding $plug to plugins.enabled..."
+      hermes config set "plugins.enabled" "$(python3 -c "
+import yaml, sys
+cfg = yaml.safe_load(open('$HERMES_CFG'))
+enabled = cfg.get('plugins', {}).get('enabled', [])
+if '$plug' not in enabled:
+    enabled.append('$plug')
+print(yaml.dump(enabled, default_flow_style=True).strip())
+" 2>/dev/null)" 2>/dev/null || true
+    fi
+  done
+fi
+
 # Auto-sync dashboard plugins from the repo into hermes's plugin directory.
 # The Dockerfile doesn't COPY plugins/ (it's dev-time code in the repo), but
 # hermes discovers dashboard plugins from ~/.hermes/plugins/<name>/dashboard/.
