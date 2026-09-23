@@ -52,6 +52,7 @@ from starlette.responses import (
     Response,
 )
 from starlette.routing import Route, WebSocketRoute
+from alexa_handler import route_alexa
 from starlette.templating import Jinja2Templates
 from starlette.websockets import WebSocket, WebSocketDisconnect, WebSocketState
 
@@ -1671,18 +1672,22 @@ async def lifespan(app):
 PROXIED_WS_PATHS = ("/api/pty", "/api/ws", "/api/events", "/api/plugins/*")
 
 # Fix #18: Close WebSocket connections idle for longer than this (seconds).
-_WS_IDLE_TIMEOUT = int(os.environ.get("WS_IDLE_TIMEOUT", "3600"))  # 1 hour
-_WS_PING_INTERVAL = float(os.environ.get("WS_PING_INTERVAL", "30"))
+# Idle = no meaningful user interaction (chat messages, button clicks).
+# Upstream keepalive pings do NOT reset this timer.
+_WS_IDLE_TIMEOUT = int(os.environ.get("WS_IDLE_TIMEOUT", "300"))  # 5 minutes default
+_WS_PING_INTERVAL = float(os.environ.get("WS_PING_INTERVAL", "30"))  # upstream keepalive
 _WS_PING_TIMEOUT = float(os.environ.get("WS_PING_TIMEOUT", "30"))
 
 
 async def _ws_pump_client_to_upstream(
     client: WebSocket,
     upstream: websockets.WebSocketClientProtocol,
+    last_user_message: list,  # mutable container: [timestamp]
 ) -> None:
     """Forward client → upstream until the client side disconnects.
 
     Handles both binary (PTY bytes) and text (JSON-RPC) frames.
+    Updates last_user_message on each real data frame (not pings).
     """
     try:
         while True:
@@ -1691,14 +1696,17 @@ async def _ws_pump_client_to_upstream(
                 return
             data = msg.get("bytes")
             if data is not None:
+                last_user_message[0] = time.monotonic()
                 await upstream.send(data)
                 continue
             text = msg.get("text")
             if text is not None:
+                last_user_message[0] = time.monotonic()
                 await upstream.send(text)
     except (WebSocketDisconnect, websockets.exceptions.ConnectionClosed):
         return
     except asyncio.TimeoutError:
+        print(f"[ws-proxy] client idle timeout on {client.url.path} — no user messages for {_WS_IDLE_TIMEOUT}s", flush=True)
         return
     except Exception as e:
         print(f"[ws-proxy] client→upstream error on {client.url.path}: {e!r}", flush=True)
@@ -1708,8 +1716,13 @@ async def _ws_pump_client_to_upstream(
 async def _ws_pump_upstream_to_client(
     upstream: websockets.WebSocketClientProtocol,
     client: WebSocket,
+    last_user_message: list,  # mutable container: [timestamp]
 ) -> None:
-    """Forward upstream → client until upstream closes."""
+    """Forward upstream → client until upstream closes.
+
+    If upstream is quiet AND user has been idle for _WS_IDLE_TIMEOUT,
+    close the connection so the container can sleep.
+    """
     try:
         while True:
             msg = await asyncio.wait_for(upstream.recv(), timeout=_WS_IDLE_TIMEOUT)
@@ -1720,7 +1733,14 @@ async def _ws_pump_upstream_to_client(
     except (websockets.exceptions.ConnectionClosed, WebSocketDisconnect):
         return
     except asyncio.TimeoutError:
-        return
+        # No upstream data for _WS_IDLE_TIMEOUT — check if user is also idle
+        user_idle = time.monotonic() - last_user_message[0]
+        if user_idle >= _WS_IDLE_TIMEOUT:
+            print(f"[ws-proxy] upstream idle + user idle ({user_idle:.0f}s) on {client.url.path} — closing to allow sleep", flush=True)
+            return
+        # User was recently active but upstream is quiet — stay alive
+        # (e.g., user sent a message, waiting for hermes to respond)
+        print(f"[ws-proxy] upstream quiet but user active ({user_idle:.0f}s ago) on {client.url.path} — keeping alive", flush=True)
     except Exception as e:
         print(f"[ws-proxy] upstream→client error on {client.url.path}: {e!r}", flush=True)
         return
@@ -1777,8 +1797,12 @@ async def ws_proxy(websocket: WebSocket) -> None:
     # 3. Both sides ready — accept and start pumping.
     await websocket.accept()
 
-    pump_in = asyncio.create_task(_ws_pump_client_to_upstream(websocket, upstream))
-    pump_out = asyncio.create_task(_ws_pump_upstream_to_client(upstream, websocket))
+    # Shared timestamp: updated by client pump, read by upstream pump.
+    # Starts as "now" so the first upstream quiet check doesn't immediately fire.
+    last_user_message = [time.monotonic()]
+
+    pump_in = asyncio.create_task(_ws_pump_client_to_upstream(websocket, upstream, last_user_message))
+    pump_out = asyncio.create_task(_ws_pump_upstream_to_client(upstream, websocket, last_user_message))
 
     try:
         # First side to finish wins; cancel the other.
@@ -1858,6 +1882,7 @@ routes = [
     WebSocketRoute("/api/plugins/{path:path}",  ws_proxy),
 
     # Telegram webhook — proxy to the gateway's webhook server on 8443.
+    Route("/alexa",                              route_alexa,         methods=["POST"]),
     Route("/telegram",                           route_telegram,      methods=["POST"]),
 
     # Root: redirect to /setup if unconfigured, otherwise proxy the dashboard.

@@ -274,6 +274,13 @@ if [ -f /data/media/scripts/requirements.txt ]; then
   pip install -q -r /data/media/scripts/requirements.txt 2>/dev/null || true
 fi
 
+# Auto-install Pocket TTS + CPU-only PyTorch if missing (lost on Railway redeploys)
+if ! command -v pocket-tts &>/dev/null; then
+  echo "Installing Pocket TTS (CPU-only)..."
+  pip install -q torch --index-url https://download.pytorch.org/whl/cpu 2>/dev/null || true
+  pip install -q pocket-tts 2>/dev/null || true
+fi
+
 # Auto-sync dashboard plugins from the repo into hermes's plugin directory.
 # The Dockerfile doesn't COPY plugins/ (it's dev-time code in the repo), but
 # hermes discovers dashboard plugins from ~/.hermes/plugins/<name>/dashboard/.
