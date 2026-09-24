@@ -295,6 +295,12 @@ if ! command -v pocket-tts &>/dev/null; then
   pip install -q pocket-tts 2>/dev/null || true
 fi
 
+# Auto-install ffmpeg if missing (needed for voice cloning OGG conversion)
+if ! command -v ffmpeg &>/dev/null; then
+  echo "Installing ffmpeg..."
+  apt-get update -qq && apt-get install -y -qq ffmpeg 2>/dev/null || true
+fi
+
 # Ensure custom dashboard plugins are in plugins.enabled (security gate blocks unknowns)
 HERMES_CFG="/data/.hermes/config.yaml"
 if [ -f "$HERMES_CFG" ]; then
