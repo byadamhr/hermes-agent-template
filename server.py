@@ -680,7 +680,10 @@ COOKIE_SECRET = secrets.token_bytes(32)
 _COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "").lower() not in ("0", "false", "no")
 
 # Public paths — no auth required. Everything else is behind the cookie gate.
-PUBLIC_PATHS = {"/health", "/login", "/logout"}
+PUBLIC_PATHS = {"/health", "/login", "/logout", "/weather"}
+
+# Weather station HTML — e-ink optimized, 600×800, self-contained.
+WEATHER_HTML = Path("/data/.hermes/static/weather-station/index.html")
 
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
@@ -1063,6 +1066,16 @@ async def page_index(request: Request):
 
 async def route_health(request: Request):
     return JSONResponse({"status": "ok", "gateway": gw.state})
+
+
+async def page_weather(request: Request) -> Response:
+    """Serve the e-ink weather station page (public, no admin auth)."""
+    if WEATHER_HTML.exists():
+        resp = HTMLResponse(WEATHER_HTML.read_text(encoding="utf-8"))
+        resp.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        return resp
+    return HTMLResponse("<h1>Not found</h1>", status_code=404)
 
 
 async def api_config_get(request: Request):
@@ -1881,6 +1894,9 @@ routes = [
 
     # Telegram webhook — proxy to the gateway's webhook server on 8443.
     Route("/telegram",                           route_telegram,      methods=["POST"]),
+
+    # E-ink weather station — public, client-side password gate.
+    Route("/weather",                            page_weather,        methods=["GET"]),
 
     # Root: redirect to /setup if unconfigured, otherwise proxy the dashboard.
     Route("/",                                  route_root,          methods=ANY_METHOD),

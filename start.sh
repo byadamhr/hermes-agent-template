@@ -372,4 +372,10 @@ if [ -f "$SYNAPSE_MONITOR" ]; then
   echo "=== Synapse monitor started (PID: $!) ==="
 fi
 
+# ── Weather station: copy patched server.py from persistent template ─────────
+if [ -f "/data/hermes-agent-template/server.py" ]; then
+  cp /data/hermes-agent-template/server.py /app/server.py
+  echo "=== Patched server.py with weather route ==="
+fi
+
 exec python /app/server.py
