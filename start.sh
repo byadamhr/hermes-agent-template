@@ -378,4 +378,27 @@ if [ -f "/data/hermes-agent-template/server.py" ]; then
   echo "=== Patched server.py with weather route ==="
 fi
 
+# ── Weather station: Kindle-friendly HTTP tunnel ──────────────────────────────
+if [ -f "/usr/local/bin/cloudflared" ] && [ -f "/data/.hermes/static/weather-station/serve.py" ]; then
+  python3 /data/.hermes/static/weather-station/serve.py &
+  sleep 1
+  # Start cloudflared and capture URL to file
+  mkdir -p /data/.hermes/logs
+  nohup cloudflared tunnel --url http://127.0.0.1:8081 > /data/.hermes/logs/weather-tunnel.log 2>&1 &
+  CF_PID=$!
+  # Wait for URL to appear in log (up to 20s)
+  for i in $(seq 1 20); do
+    sleep 1
+    URL=$(grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' /data/.hermes/logs/weather-tunnel.log 2>/dev/null | head -1)
+    if [ -n "$URL" ]; then
+      echo "$URL" > /data/.hermes/logs/weather-tunnel-url.txt
+      echo "=== Weather tunnel: $URL ==="
+      break
+    fi
+  done
+  if [ -z "$URL" ]; then
+    echo "=== Weather tunnel started (URL pending in log) ==="
+  fi
+fi
+
 exec python /app/server.py
