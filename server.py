@@ -680,10 +680,8 @@ COOKIE_SECRET = secrets.token_bytes(32)
 _COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "").lower() not in ("0", "false", "no")
 
 # Public paths — no auth required. Everything else is behind the cookie gate.
-PUBLIC_PATHS = {"/health", "/login", "/logout", "/weather", "/weather/kindle"}
+PUBLIC_PATHS = {"/health", "/login", "/logout"}
 
-# Weather station HTML — e-ink optimized, 600×800, self-contained.
-WEATHER_HTML = Path("/data/.hermes/static/weather-station/index.html")
 
 
 # ── Rate limiting ─────────────────────────────────────────────────────────────
@@ -1066,48 +1064,6 @@ async def page_index(request: Request):
 
 async def route_health(request: Request):
     return JSONResponse({"status": "ok", "gateway": gw.state})
-
-
-async def page_weather(request: Request) -> Response:
-    """Serve the e-ink weather station page (public, no admin auth)."""
-    if WEATHER_HTML.exists():
-        resp = HTMLResponse(WEATHER_HTML.read_text(encoding="utf-8"))
-        resp.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
-        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
-        return resp
-    return HTMLResponse("<h1>Not found</h1>", status_code=404)
-
-
-KINDLE_REDIRECT_HTML = """<!DOCTYPE html><html><head>
-<meta http-equiv="refresh" content="0;url={url}">
-<title>Redirecting to Weather Station...</title>
-<style>body{font-family:monospace;display:flex;align-items:center;justify-content:center;
-min-height:100vh;margin:0;background:#f8f8f8;color:#333}
-.box{text-align:center}.url{color:#666;font-size:14px;margin-top:12px;
-word-break:break-all}</style></head><body><div class="box">
-<h2>Weather Station</h2>
-<p>Redirecting to Kindle-optimized view...</p>
-<div class="url">{url}</div>
-<p style="margin-top:20px;font-size:12px;color:#999">If not redirected, <a href="{url}">click here</a></p>
-</div></body></html>"""
-
-TUNNEL_URL_FILE = Path("/data/.hermes/logs/weather-tunnel-url.txt")
-
-
-async def page_weather_kindle(request: Request) -> Response:
-    """Redirect to the current Cloudflare tunnel URL for Kindle access."""
-    url = ""
-    if TUNNEL_URL_FILE.exists():
-        try:
-            url = TUNNEL_URL_FILE.read_text().strip()
-        except Exception:
-            pass
-    if not url:
-        return HTMLResponse(
-            "<h2>Tunnel not active</h2><p>Ask the agent to start the weather service.</p>",
-            status_code=503,
-        )
-    return HTMLResponse(KINDLE_REDIRECT_HTML.format(url=url))
 
 
 async def api_config_get(request: Request):
@@ -1926,10 +1882,6 @@ routes = [
 
     # Telegram webhook — proxy to the gateway's webhook server on 8443.
     Route("/telegram",                           route_telegram,      methods=["POST"]),
-
-    # E-ink weather station — public, client-side password gate.
-    Route("/weather",                            page_weather,        methods=["GET"]),
-    Route("/weather/kindle",                     page_weather_kindle, methods=["GET"]),
 
     # Root: redirect to /setup if unconfigured, otherwise proxy the dashboard.
     Route("/",                                  route_root,          methods=ANY_METHOD),
