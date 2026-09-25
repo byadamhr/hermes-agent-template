@@ -295,6 +295,9 @@ if ! command -v pocket-tts &>/dev/null; then
   pip install -q pocket-tts 2>/dev/null || true
 fi
 
+# Upgrade honcho-ai SDK to 2.5.1 (lost on Railway redeploys — pyproject.toml in image has 2.2.0)
+pip install -q honcho-ai==2.5.1 2>/dev/null || true
+
 # Auto-install ffmpeg if missing (needed for voice cloning OGG conversion)
 if ! command -v ffmpeg &>/dev/null; then
   echo "Installing ffmpeg..."
