@@ -308,21 +308,31 @@ if ! command -v ffmpeg &>/dev/null; then
 fi
 
 # Ensure custom dashboard plugins are in plugins.enabled (security gate blocks unknowns)
+# Use direct Python YAML manipulation to avoid escaping corruption from multiple
+# hermes config set round-trips. Load once, add all plugins, write once.
 HERMES_CFG="/data/.hermes/config.yaml"
 if [ -f "$HERMES_CFG" ]; then
-  for plug in media synapse tryon gamma; do
-    if ! grep -q "\"$plug\"" "$HERMES_CFG" 2>/dev/null && ! grep -q "- $plug" "$HERMES_CFG" 2>/dev/null; then
-      echo "Adding $plug to plugins.enabled..."
-      hermes config set "plugins.enabled" "$(python3 -c "
-import yaml, sys
+  python3 << PYTHON_EOF 2>/dev/null
+import yaml
 cfg = yaml.safe_load(open('$HERMES_CFG'))
-enabled = cfg.get('plugins', {}).get('enabled', [])
-if '$plug' not in enabled:
-    enabled.append('$plug')
-print(yaml.dump(enabled, default_flow_style=True).strip())
-" 2>/dev/null)" 2>/dev/null || true
-    fi
-  done
+if 'plugins' not in cfg:
+    cfg['plugins'] = {}
+if 'enabled' not in cfg['plugins']:
+    cfg['plugins']['enabled'] = []
+elif not isinstance(cfg['plugins']['enabled'], list):
+    # If it got corrupted into a string, reset it
+    cfg['plugins']['enabled'] = []
+
+# Add plugins if not already present
+for plug in ['media', 'synapse', 'tryon', 'gamma']:
+    if plug not in cfg['plugins']['enabled']:
+        cfg['plugins']['enabled'].append(plug)
+        print(f"Added {plug} to plugins.enabled")
+
+# Write back with proper YAML formatting
+with open('$HERMES_CFG', 'w') as f:
+    yaml.dump(cfg, f, default_flow_style=False)
+PYTHON_EOF
 fi
 
 # Auto-sync dashboard plugins from the repo into hermes's plugin directory.
