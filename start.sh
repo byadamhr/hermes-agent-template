@@ -295,8 +295,9 @@ if ! command -v pocket-tts &>/dev/null; then
   pip install -q pocket-tts 2>/dev/null || true
 fi
 
-# Upgrade honcho-ai SDK to 2.5.1 (lost on Railway redeploys — pyproject.toml in image has 2.2.0)
-pip install -q honcho-ai==2.5.1 2>/dev/null || true
+# honcho-ai is pinned to 2.5.1 at build time in the Dockerfile (see hermes-agent install step),
+# which properly resolves all transitive dependencies via uv. Do not upgrade it here at runtime —
+# pip install -q with error suppression can't reliably resolve deps like ruamel.yaml/python-dotenv.
 
 # Auto-install ffmpeg if missing (needed for voice cloning OGG conversion)
 if ! command -v ffmpeg &>/dev/null; then
