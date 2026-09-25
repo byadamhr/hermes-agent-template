@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# ─── Graceful PostgreSQL shutdown on SIGTERM/SIGINT ─────────────────────────
+# Railway sends SIGTERM on deploy/restart. Without this, PostgreSQL doesn't
+# shut down cleanly and forces WAL recovery on next boot (grows pg_wal/).
+# Note: PG_BIN/HONCHO_PGDATA defined below, so the trap references them at
+# execution time (not definition time), which is fine.
+
 # /app/patch_websocket_config.sh  # DISABLED: corrupts hermes_state.py on boot
 
 # ─── PostgreSQL (Honcho backend) ────────────────────────────────────────────
@@ -378,4 +384,24 @@ if [ -f "$SYNAPSE_MONITOR" ]; then
   echo "=== Synapse monitor started (PID: $!) ==="
 fi
 
-exec python /app/server.py
+# ─── Graceful shutdown handler ──────────────────────────────────────────────
+# Instead of `exec` (which replaces the shell, losing signal traps), run the
+# server in background so bash remains the process that receives SIGTERM.
+# This lets us shut down PostgreSQL cleanly before exiting.
+cleanup() {
+  echo "=== Received shutdown signal — stopping gracefully ==="
+  # Stop Python server first (it's the public-facing process)
+  kill -TERM "$SERVER_PID" 2>/dev/null || true
+  wait "$SERVER_PID" 2>/dev/null || true
+  # Then stop PostgreSQL cleanly so WAL segments recycle on next boot
+  su - postgres -c "$PG_BIN/pg_ctl -D '$HONCHO_PGDATA' -m fast stop" 2>/dev/null || true
+  echo "=== Cleanup complete ==="
+}
+trap cleanup SIGTERM SIGINT
+python /app/server.py &
+SERVER_PID=$!
+# If server exits on its own, clean up PG and exit with the server's code
+wait "$SERVER_PID"
+EXIT_CODE=$?
+su - postgres -c "$PG_BIN/pg_ctl -D '$HONCHO_PGDATA' -m fast stop" 2>/dev/null || true
+exit "$EXIT_CODE"
