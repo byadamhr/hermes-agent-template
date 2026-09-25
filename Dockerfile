@@ -13,7 +13,7 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 # newest tag (format `vYYYY.M.D`, optionally with a `.PATCH` suffix, e.g.
 # `v2026.5.29.2`) and update the default below. Use `main` only if you accept
 # that every rebuild can pull arbitrary new upstream commits.
-ARG HERMES_REF=main
+ARG HERMES_REF=v2026.5.29.2
 
 # tini = tiny init that we run as PID 1. Without it, hermes's grandchild
 # processes (MCP stdio servers, git, bun, browser daemons spawned by tools)
@@ -63,6 +63,7 @@ RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/h
     cd /opt/hermes-agent/ui-tui && \
     npm install --silent --no-fund --no-audit --progress=false && \
     npm run build && \
+    git -C /opt/hermes-agent rev-parse HEAD > /hermes-commit.txt && \
     rm -rf /opt/hermes-agent/web /opt/hermes-agent/.git /root/.npm
 
 # Why pre-build ui-tui (and why we don't delete it after):
