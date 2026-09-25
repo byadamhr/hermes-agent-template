@@ -106,15 +106,33 @@ fi
 
 # LLM keys for Honcho's background processing (deriver, summary, dialectic)
 # Reads OpenRouter key from auth.json credential pool (label: "honcho")
+echo "=== DEBUG: auth.json exists: $([ -f /data/.hermes/auth.json ] && echo 'yes' || echo 'no') ==="
+
 OR_KEY=$(python3 -c "
 import json
-with open('/data/.hermes/auth.json') as f:
-    data = json.load(f)
-for c in data.get('credential_pool', {}).get('openrouter', []):
-    if c.get('label') == 'honcho':
-        print(c.get('access_token', ''))
-        break
+try:
+    with open('/data/.hermes/auth.json') as f:
+        data = json.load(f)
+    for c in data.get('credential_pool', {}).get('openrouter', []):
+        if c.get('label') == 'honcho':
+            print(c.get('access_token', ''))
+            break
+except Exception:
+    pass
 " 2>/dev/null)
+
+# Fallback: if the credential pool read fails or comes up empty, try the
+# OPENROUTER_API_KEY env var directly (e.g. set manually on Railway).
+if [ -z "$OR_KEY" ] && [ -n "$OPENROUTER_API_KEY" ]; then
+  OR_KEY="$OPENROUTER_API_KEY"
+fi
+
+if [ -n "$OR_KEY" ]; then
+  OR_KEY_FOUND=true
+else
+  OR_KEY_FOUND=false
+fi
+echo "=== OpenRouter key status: found=${OR_KEY_FOUND:-false} ==="
 
 if [ -n "$OR_KEY" ]; then
   # Global LLM key (used as fallback)
@@ -164,6 +182,11 @@ if [ -d /opt/honcho/.venv ] && [ -f /opt/honcho/src/main.py ]; then
   echo "=== Running Honcho database migrations ==="
   cd /opt/honcho && /opt/honcho/.venv/bin/python scripts/provision_db.py 2>&1 || \
     echo "WARNING: Honcho migration failed"
+
+  # Debug: confirm which honcho-ai version is actually loaded at startup.
+  # We rely on the Docker image's bundled SDK (2.2.0, stable as of cf680ef) —
+  # this log lets us catch it immediately if that ever drifts again.
+  /opt/honcho/.venv/bin/python3 -c "import honcho; print(f'honcho-ai version: {honcho.__version__}')" || true
 
   echo "=== Starting Honcho API server ==="
   /opt/honcho/.venv/bin/fastapi run --host 127.0.0.1 --port 8000 /opt/honcho/src/main.py \
