@@ -57,7 +57,6 @@ RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
 RUN git clone --depth 1 --branch ${HERMES_REF} https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent && \
     cd /opt/hermes-agent && \
     uv pip install --system --no-cache -e ".[all,messaging,tts-premium,honcho,bedrock,anthropic,edge-tts,hindsight]" && \
-    uv pip install --system --no-cache --upgrade honcho-ai==2.5.1 && \
     cd /opt/hermes-agent/web && \
     npm install --silent && \
     npm run build && \
