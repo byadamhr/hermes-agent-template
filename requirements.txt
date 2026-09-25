@@ -7,7 +7,8 @@ httpx>=0.27.0
 # hermes's /api/pty, /api/ws, /api/events endpoints. httpx does not speak
 # WebSockets, so we need a dedicated client library.
 websockets>=12.0
-# honcho-ai 2.5.1+ (installed at runtime by start.sh) depends on ruamel.yaml,
-# which is not part of the base image. Install it here so it's available
-# before start.sh upgrades honcho-ai.
+# honcho-ai 2.5.1+ (installed at runtime by start.sh) depends on ruamel.yaml
+# and python-dotenv, which are not part of the base image. Install them here
+# so they're available before start.sh upgrades honcho-ai.
 ruamel.yaml>=0.18.0
+python-dotenv>=0.19.0
